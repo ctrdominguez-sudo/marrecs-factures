@@ -1,0 +1,671 @@
+<!DOCTYPE html>
+<html lang="ca">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Marrecs de Salt · Factures</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=IBM+Plex+Sans:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --blue:        #1B6CA8;
+    --blue-dark:   #14527f;
+    --blue-light:  #2285cc;
+    --blue-glow:   rgba(27,108,168,0.35);
+    --gold:        #F5A623;
+    --black:       #0a0f14;
+    --dark:        #111820;
+    --mid:         #1a2330;
+    --gray:        #2d3d4f;
+    --light-gray:  #6a8299;
+    --border:      #253344;
+    --surface:     #151f2a;
+    --surface2:    #1c2a38;
+    --text:        #dce8f0;
+    --text-dim:    #7a9db5;
+    --success:     #2ecc71;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background-color: var(--black);
+    color: var(--text);
+    font-family: 'IBM Plex Sans', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+    background-image: radial-gradient(ellipse 80% 50% at 50% -10%, rgba(27,108,168,0.18) 0%, transparent 70%);
+  }
+
+  .top-stripe {
+    height: 4px;
+    background: linear-gradient(90deg, var(--blue-dark) 0%, #5bb3e8 40%, var(--gold) 60%, var(--blue-dark) 100%);
+    background-size: 200% 100%;
+    animation: stripe-move 5s linear infinite;
+  }
+  @keyframes stripe-move { 0%{background-position:0% 0%} 100%{background-position:200% 0%} }
+
+  header {
+    background: rgba(17,24,32,0.95);
+    border-bottom: 1px solid var(--border);
+    padding: 16px 40px;
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    backdrop-filter: blur(12px);
+  }
+
+  .logo-wrap { height: 46px; display:flex; align-items:center; flex-shrink:0; }
+  .logo-wrap img { height: 46px; width: auto; display:block; }
+  .logo-fallback {
+    display: none;
+    width: 46px; height: 46px;
+    background: var(--blue); border-radius: 50%;
+    align-items: center; justify-content: center;
+    font-family: 'Bebas Neue', sans-serif; font-size: 17px;
+    color: white; box-shadow: 0 0 20px var(--blue-glow);
+  }
+
+  .divider-v { width:1px; height:34px; background:var(--border); }
+
+  .header-text h1 {
+    font-family: 'Bebas Neue', sans-serif; font-size: 21px;
+    letter-spacing: 3px; color: white; line-height: 1;
+  }
+  .header-text p {
+    font-size: 11px; color: var(--text-dim);
+    font-family: 'IBM Plex Mono', monospace;
+    margin-top: 4px; text-transform: uppercase; letter-spacing: 1.5px;
+  }
+
+  main { max-width: 820px; margin: 0 auto; padding: 40px 24px 80px; }
+
+  .page-intro {
+    margin-bottom: 28px; padding: 24px 28px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-left: 4px solid var(--blue); border-radius: 4px;
+  }
+  .page-intro h2 {
+    font-family: 'Bebas Neue', sans-serif; font-size: 25px;
+    letter-spacing: 2px; color: white; margin-bottom: 6px;
+  }
+  .page-intro p { color: var(--text-dim); font-size: 13px; line-height: 1.7; }
+
+  .form-section {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 6px; margin-bottom: 16px; overflow: hidden;
+    transition: border-color 0.2s;
+  }
+  .form-section:focus-within { border-color: var(--blue); box-shadow: 0 0 0 1px rgba(27,108,168,0.2); }
+
+  .section-header {
+    padding: 13px 22px; background: var(--surface2);
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 12px;
+  }
+  .section-num {
+    width: 24px; height: 24px; background: var(--blue); border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 600; color: white; flex-shrink: 0;
+    font-family: 'IBM Plex Mono', monospace;
+  }
+  .section-title { font-family: 'Bebas Neue', sans-serif; font-size: 15px; letter-spacing: 2px; color: var(--text); }
+
+  .section-body { padding: 20px 22px; }
+
+  .field-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+  .field-grid.three { grid-template-columns:1fr 1fr 1fr; }
+  .field-grid.full  { grid-template-columns:1fr; }
+
+  .field { display:flex; flex-direction:column; gap:6px; }
+  .field.span2 { grid-column:span 2; }
+  .field.span3 { grid-column:span 3; }
+
+  label {
+    font-size: 10px; font-family: 'IBM Plex Mono', monospace;
+    text-transform: uppercase; letter-spacing: 1.3px;
+    color: var(--text-dim); font-weight: 500;
+  }
+  label .req { color: #5bb3e8; margin-left: 2px; }
+
+  input, select, textarea {
+    background: var(--mid); border: 1px solid var(--gray); border-radius: 4px;
+    color: var(--text); font-family: 'IBM Plex Sans', sans-serif; font-size: 14px;
+    padding: 10px 14px; width: 100%;
+    transition: border-color 0.15s, box-shadow 0.15s;
+    appearance: none; -webkit-appearance: none;
+  }
+  input:focus, select:focus, textarea:focus {
+    outline: none; border-color: var(--blue); box-shadow: 0 0 0 3px var(--blue-glow);
+  }
+  input::placeholder, textarea::placeholder { color: var(--light-gray); }
+  select {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%236a8299' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 14px center; padding-right: 36px; cursor: pointer;
+  }
+  select option { background: var(--mid); color: var(--text); }
+  textarea { resize: vertical; min-height: 80px; }
+
+  input.computed {
+    background: rgba(27,108,168,0.08); border-color: rgba(27,108,168,0.35);
+    color: #7dd4fc; font-family: 'IBM Plex Mono', monospace; font-weight: 500;
+  }
+
+  .extra-input { display:none; margin-top:8px; }
+  .extra-input.visible { display:block; }
+
+  .varis-info {
+    display: none; margin-top: 10px; padding: 10px 14px;
+    background: rgba(245,166,35,0.1); border: 1px solid rgba(245,166,35,0.4);
+    border-radius: 4px; font-size: 12px; color: var(--gold); line-height: 1.6;
+  }
+  .varis-info.visible { display:block; }
+
+  #categoria-custom-wrap { display:none; margin-top:10px; }
+  #categoria-custom-wrap.visible { display:block; }
+
+  .file-upload-area {
+    border: 2px dashed var(--gray); border-radius: 6px; padding: 28px;
+    text-align: center; cursor: pointer; position: relative;
+    transition: border-color 0.2s, background 0.2s;
+  }
+  .file-upload-area:hover, .file-upload-area.drag-over {
+    border-color: var(--blue); background: rgba(27,108,168,0.07);
+  }
+  .file-upload-area input[type="file"] {
+    position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; padding: 0; border: none;
+  }
+  .upload-icon { font-size: 28px; margin-bottom: 8px; }
+  .upload-text { color: var(--text-dim); font-size: 13px; line-height: 1.5; }
+  .upload-text strong { color: var(--blue-light); }
+
+  .file-list { margin-top: 10px; display:flex; flex-direction:column; gap:8px; }
+  .file-item {
+    display:flex; align-items:center; gap:10px;
+    background: var(--mid); border: 1px solid var(--border); border-radius:4px; padding:8px 12px; font-size:13px;
+  }
+  .file-item-icon { font-size:16px; }
+  .file-item-name { flex:1; color:var(--text); }
+  .file-item-size { color:var(--text-dim); font-size:11px; font-family:'IBM Plex Mono',monospace; }
+  .file-remove { background:none; border:none; color:var(--light-gray); cursor:pointer; font-size:16px; padding:0 4px; transition:color 0.15s; }
+  .file-remove:hover { color:#f87171; }
+
+  .total-row input {
+    font-size: 20px !important; padding: 14px !important;
+    border-color: var(--blue) !important; color: white !important;
+    font-weight: 600 !important; background: rgba(27,108,168,0.15) !important;
+  }
+
+  .submit-area { margin-top:30px; display:flex; flex-direction:column; align-items:center; gap:14px; }
+  .btn-submit {
+    background: var(--blue); color:white; border:none; border-radius:4px;
+    font-family: 'Bebas Neue', sans-serif; font-size:20px; letter-spacing:3px;
+    padding:16px 56px; cursor:pointer;
+    transition: background 0.15s, transform 0.1s, box-shadow 0.15s;
+    box-shadow: 0 4px 24px var(--blue-glow);
+  }
+  .btn-submit:hover { background: var(--blue-light); transform:translateY(-1px); box-shadow: 0 6px 32px rgba(27,108,168,0.55); }
+  .btn-submit:active { transform:translateY(0); }
+  .btn-submit:disabled { background:var(--gray); cursor:not-allowed; transform:none; box-shadow:none; }
+  .submit-note { font-size:11px; color:var(--text-dim); text-align:center; font-family:'IBM Plex Mono',monospace; }
+
+  .toast {
+    position:fixed; bottom:30px; left:50%;
+    transform: translateX(-50%) translateY(100px);
+    background: var(--success); color:#0a0f14;
+    font-family:'IBM Plex Sans',sans-serif; font-weight:600; font-size:14px;
+    padding:14px 28px; border-radius:6px; box-shadow:0 8px 32px rgba(0,0,0,0.5);
+    transition: transform 0.4s cubic-bezier(0.34,1.56,0.64,1);
+    z-index:1000; text-align:center; max-width:380px;
+  }
+  .toast.show { transform: translateX(-50%) translateY(0); }
+  .toast.error { background:#ef4444; color:white; }
+
+  .spinner {
+    display:inline-block; width:16px; height:16px;
+    border:2px solid rgba(255,255,255,0.3); border-top-color:white; border-radius:50%;
+    animation:spin 0.7s linear infinite; vertical-align:middle; margin-right:8px;
+  }
+  @keyframes spin { to { transform:rotate(360deg); } }
+
+  .config-banner {
+    background:rgba(245,166,35,0.1); border:1px solid var(--gold); border-radius:6px;
+    padding:14px 18px; margin-bottom:20px; font-size:13px; color:var(--gold); line-height:1.6;
+  }
+  .config-banner strong { color:#ffd080; }
+  .config-banner code { background:rgba(245,166,35,0.2); padding:1px 6px; border-radius:3px; font-family:'IBM Plex Mono',monospace; font-size:12px; }
+  .config-banner.hidden { display:none; }
+
+  @media (max-width:600px) {
+    header { padding:14px 16px; }
+    main { padding:20px 14px 60px; }
+    .field-grid, .field-grid.three { grid-template-columns:1fr; }
+    .field.span2, .field.span3 { grid-column:span 1; }
+    .logo-wrap img { height:36px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="top-stripe"></div>
+
+<header>
+  <div class="logo-wrap">
+    <img src="https://marrecs.cat/wp-content/uploads/2023/03/marrecs_header_clar.png"
+         alt="Marrecs de Salt"
+         onerror="this.style.display='none';document.querySelector('.logo-fallback').style.display='flex';">
+    <div class="logo-fallback">MS</div>
+  </div>
+  <div class="divider-v"></div>
+  <div class="header-text">
+    <h1>Marrecs de Salt</h1>
+    <p>Gestió de factures · Tresoreria</p>
+  </div>
+</header>
+
+<main>
+  <div class="page-intro">
+    <h2>Nova petició de factura</h2>
+    <p>Emplena el formulari per enviar una factura al tresorer. Els camps marcats amb <span style="color:#5bb3e8">*</span> són obligatoris. Els imports s'calculen automàticament a partir de la base i els percentatges.</p>
+  </div>
+
+  <div class="config-banner hidden" id="config-banner">
+    ⚠️ <strong>Configuració pendent:</strong> Substitueix <code>POSA_AQUÍ_LA_URL_DEL_APPS_SCRIPT</code> per la URL del teu Google Apps Script.
+  </div>
+
+  <form id="factura-form" novalidate>
+
+    <!-- 1. Soci -->
+    <div class="form-section">
+      <div class="section-header"><div class="section-num">1</div><span class="section-title">Identificació del soci</span></div>
+      <div class="section-body">
+        <div class="field-grid">
+          <div class="field">
+            <label for="malnom">Malnom del soci <span class="req">*</span></label>
+            <input type="text" id="malnom" placeholder="El teu malnom a la colla" required>
+          </div>
+          <div class="field">
+            <label for="iban">IBAN del soci <span class="req">*</span></label>
+            <input type="text" id="iban" placeholder="ES00 0000 0000 0000 0000 0000" required>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2. Dades factura -->
+    <div class="form-section">
+      <div class="section-header"><div class="section-num">2</div><span class="section-title">Dades de la factura</span></div>
+      <div class="section-body">
+        <div class="field-grid three">
+          <div class="field">
+            <label for="dataFactura">Data factura <span class="req">*</span></label>
+            <input type="date" id="dataFactura" required>
+          </div>
+          <div class="field">
+            <label for="numFactura">Número factura <span class="req">*</span></label>
+            <input type="text" id="numFactura" placeholder="p.ex. F-2024-001" required>
+          </div>
+          <div class="field">
+            <label for="categoria">Categoria <span class="req">*</span></label>
+            <select id="categoria" required onchange="handleCategoria(this.value)">
+              <option value="">— Selecciona —</option>
+              <option value="Canalla">Canalla</option>
+              <option value="Social">Social</option>
+              <option value="Local">Local</option>
+              <option value="Sanitaris">Sanitaris</option>
+              <option value="Publicitat">Publicitat</option>
+              <option value="Esdeveniments">Esdeveniments (especificar)</option>
+              <option value="Altra">Altra categoria...</option>
+            </select>
+            <div id="categoria-custom-wrap">
+              <input type="text" id="categoriaCustom" placeholder="Escriu la categoria o l'esdeveniment">
+            </div>
+          </div>
+        </div>
+        <div class="field-grid full" style="margin-top:14px;">
+          <div class="field">
+            <label for="concepte">Concepte <span class="req">*</span></label>
+            <input type="text" id="concepte" placeholder="Descripció breu de la factura" required>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 3. Proveïdor -->
+    <div class="form-section">
+      <div class="section-header"><div class="section-num">3</div><span class="section-title">Dades del proveïdor</span></div>
+      <div class="section-body">
+        <div class="field-grid">
+          <div class="field">
+            <label for="proveidor">Proveïdor <span class="req">*</span></label>
+            <input type="text" id="proveidor" placeholder="Nom de l'empresa o autònom" required>
+          </div>
+          <div class="field">
+            <label for="nifProveidor">NIF / CIF proveïdor <span class="req">*</span></label>
+            <input type="text" id="nifProveidor" placeholder="p.ex. B12345678" required>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 4. Imports -->
+    <div class="form-section">
+      <div class="section-header"><div class="section-num">4</div><span class="section-title">Imports</span></div>
+      <div class="section-body">
+
+        <div class="field-grid three">
+          <div class="field">
+            <label for="importSenseIVA">Import sense IVA (€) <span class="req">*</span></label>
+            <input type="number" id="importSenseIVA" placeholder="0.00" step="0.01" min="0" required oninput="recalcular()">
+          </div>
+          <div class="field">
+            <label for="percIVA">% IVA</label>
+            <select id="percIVA" onchange="handleIVA(this.value)">
+              <option value="0">0%</option>
+              <option value="4">4%</option>
+              <option value="10">10%</option>
+              <option value="21" selected>21%</option>
+              <option value="varis">Varis (diversos articles)</option>
+              <option value="custom">Altre % personalitzat</option>
+            </select>
+            <input type="number" id="percIVACustom" class="extra-input" placeholder="Introdueix el % d'IVA" step="0.01" min="0" max="100" oninput="recalcular()">
+            <div class="varis-info" id="varis-iva-info">
+              ℹ️ Seleccionat <strong>Varis</strong>: introdueix l'import total d'IVA al camp de la dreta, ja que la factura té articles amb IVA diferent.
+            </div>
+          </div>
+          <div class="field">
+            <label for="importIVA">Import IVA (€)</label>
+            <input type="number" id="importIVA" class="computed" placeholder="Calculat" step="0.01" readonly oninput="recalcularDesIVA()">
+          </div>
+        </div>
+
+        <div class="field-grid three" style="margin-top:14px;">
+          <div class="field">
+            <label for="importAmbIVA">Import amb IVA (€)</label>
+            <input type="text" id="importAmbIVA" class="computed" readonly placeholder="Calculat">
+          </div>
+          <div class="field">
+            <label for="percIRPF">% IRPF retenció</label>
+            <select id="percIRPF" onchange="handleIRPF(this.value)">
+              <option value="0" selected>0%</option>
+              <option value="7">7%</option>
+              <option value="15">15%</option>
+              <option value="19">19%</option>
+              <option value="custom">Altre % personalitzat</option>
+            </select>
+            <input type="number" id="percIRPFCustom" class="extra-input" placeholder="Introdueix el % d'IRPF" step="0.01" min="0" max="100" oninput="recalcular()">
+          </div>
+          <div class="field">
+            <label for="importIRPF">Import IRPF retenció (€)</label>
+            <input type="text" id="importIRPF" class="computed" readonly placeholder="Calculat">
+          </div>
+        </div>
+
+        <div class="field-grid full total-row" style="margin-top:14px;">
+          <div class="field">
+            <label for="importTotal">Import total a pagar (€)</label>
+            <input type="text" id="importTotal" class="computed" readonly placeholder="Calculat automàticament">
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- 5. Adjunts -->
+    <div class="form-section">
+      <div class="section-header"><div class="section-num">5</div><span class="section-title">Factura (arxiu adjunt)</span></div>
+      <div class="section-body">
+        <div class="file-upload-area" id="drop-area">
+          <input type="file" id="fitxers" multiple accept=".pdf,.jpg,.jpeg,.png,.webp" onchange="handleFiles(this.files)">
+          <div class="upload-icon">📎</div>
+          <div class="upload-text"><strong>Clica o arrossega</strong> per adjuntar la factura<br>Formats: PDF, JPG, PNG · Màxim 10 MB per fitxer</div>
+        </div>
+        <div class="file-list" id="file-list"></div>
+      </div>
+    </div>
+
+    <!-- 6. Comentaris -->
+    <div class="form-section">
+      <div class="section-header"><div class="section-num">6</div><span class="section-title">Comentaris addicionals</span></div>
+      <div class="section-body">
+        <div class="field">
+          <label for="comentaris">Comentaris</label>
+          <textarea id="comentaris" rows="4" placeholder="Qualsevol informació addicional que vulguis afegir..."></textarea>
+        </div>
+      </div>
+    </div>
+
+    <div class="submit-area">
+      <button type="submit" class="btn-submit" id="btn-submit">Enviar factura</button>
+      <p class="submit-note">Les dades s'enviaran al tresorer de la colla de forma segura</p>
+    </div>
+
+  </form>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script>
+  const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwQm7kRECc0s943oWFvxt8xdgyJ-WDvjuAdufNc4lVhb0CgmTd3vsDpHYgskBBHcRJylA/exec';
+
+  // ---- Categoria ----
+  function handleCategoria(val) {
+    const wrap = document.getElementById('categoria-custom-wrap');
+    const ci   = document.getElementById('categoriaCustom');
+    if (val === 'Altra' || val === 'Esdeveniments') {
+      wrap.classList.add('visible');
+      ci.placeholder = val === 'Altra' ? 'Escriu la categoria' : "Especifica l'esdeveniment";
+    } else {
+      wrap.classList.remove('visible');
+      ci.value = '';
+    }
+  }
+
+  // ---- IVA mode ----
+  let ivaMode = 'normal'; // 'normal' | 'varis' | 'custom'
+
+  function handleIVA(val) {
+    const customInput = document.getElementById('percIVACustom');
+    const varisInfo   = document.getElementById('varis-iva-info');
+    const ivaField    = document.getElementById('importIVA');
+
+    if (val === 'custom') {
+      ivaMode = 'custom';
+      customInput.classList.add('visible');
+      varisInfo.classList.remove('visible');
+      ivaField.readOnly = true;
+      ivaField.placeholder = 'Calculat';
+    } else if (val === 'varis') {
+      ivaMode = 'varis';
+      customInput.classList.remove('visible');
+      varisInfo.classList.add('visible');
+      ivaField.readOnly = false;
+      ivaField.placeholder = "Introdueix l'import total d'IVA";
+      ivaField.value = '';
+    } else {
+      ivaMode = 'normal';
+      customInput.classList.remove('visible');
+      varisInfo.classList.remove('visible');
+      ivaField.readOnly = true;
+      ivaField.placeholder = 'Calculat';
+    }
+    recalcular();
+  }
+
+  // Quan l'usuari escriu l'import IVA manualment (mode varis)
+  document.getElementById('importIVA').addEventListener('input', function() {
+    if (ivaMode === 'varis') recalcularDesIVA();
+  });
+
+  function recalcularDesIVA() {
+    const base = parseFloat(document.getElementById('importSenseIVA').value) || 0;
+    const qIVA = parseFloat(document.getElementById('importIVA').value) || 0;
+    const ambIVA = base + qIVA;
+    const pIRPF = getPercIRPF();
+    const qIRPF = base * pIRPF / 100;
+    document.getElementById('importAmbIVA').value = fmt(ambIVA);
+    document.getElementById('importIRPF').value   = fmt(qIRPF);
+    document.getElementById('importTotal').value  = fmt(ambIVA - qIRPF) + ' €';
+  }
+
+  // ---- IRPF ----
+  function handleIRPF(val) {
+    document.getElementById('percIRPFCustom').classList.toggle('visible', val === 'custom');
+    recalcular();
+  }
+
+  function getPercIRPF() {
+    let v = document.getElementById('percIRPF').value;
+    if (v === 'custom') v = parseFloat(document.getElementById('percIRPFCustom').value) || 0;
+    return parseFloat(v) || 0;
+  }
+
+  // ---- Recàlcul general ----
+  function recalcular() {
+    if (ivaMode === 'varis') { recalcularDesIVA(); return; }
+
+    const base = parseFloat(document.getElementById('importSenseIVA').value) || 0;
+
+    let pIVA;
+    if (ivaMode === 'custom') pIVA = parseFloat(document.getElementById('percIVACustom').value) || 0;
+    else pIVA = parseFloat(document.getElementById('percIVA').value) || 0;
+
+    const qIVA  = base * pIVA / 100;
+    const pIRPF = getPercIRPF();
+    const qIRPF = base * pIRPF / 100;
+    const ambIVA = base + qIVA;
+
+    document.getElementById('importIVA').value    = fmt(qIVA);
+    document.getElementById('importAmbIVA').value = fmt(ambIVA);
+    document.getElementById('importIRPF').value   = fmt(qIRPF);
+    document.getElementById('importTotal').value  = fmt(ambIVA - qIRPF) + ' €';
+  }
+
+  function fmt(n) { return n.toFixed(2); }
+
+  // ---- Fitxers ----
+  let selectedFiles = [];
+
+  function handleFiles(files) {
+    for (const f of files) {
+      if (f.size > 10*1024*1024) { showToast('❌ '+f.name+' supera els 10MB','error'); continue; }
+      if (!selectedFiles.find(x => x.name===f.name && x.size===f.size)) selectedFiles.push(f);
+    }
+    renderFiles();
+  }
+
+  function renderFiles() {
+    const list = document.getElementById('file-list');
+    list.innerHTML = '';
+    selectedFiles.forEach((f,i) => {
+      const ext  = f.name.split('.').pop().toLowerCase();
+      const icon = ext==='pdf' ? '📄' : '🖼️';
+      const size = f.size<1024*1024 ? (f.size/1024).toFixed(0)+' KB' : (f.size/1024/1024).toFixed(1)+' MB';
+      const el = document.createElement('div');
+      el.className = 'file-item';
+      el.innerHTML = `<span class="file-item-icon">${icon}</span><span class="file-item-name">${f.name}</span><span class="file-item-size">${size}</span><button type="button" class="file-remove" onclick="removeFile(${i})">✕</button>`;
+      list.appendChild(el);
+    });
+  }
+
+  function removeFile(i) { selectedFiles.splice(i,1); renderFiles(); }
+
+  const dropArea = document.getElementById('drop-area');
+  dropArea.addEventListener('dragover', e => { e.preventDefault(); dropArea.classList.add('drag-over'); });
+  dropArea.addEventListener('dragleave', () => dropArea.classList.remove('drag-over'));
+  dropArea.addEventListener('drop', e => { e.preventDefault(); dropArea.classList.remove('drag-over'); handleFiles(e.dataTransfer.files); });
+
+  // ---- Toast ----
+  function showToast(msg, type='success') {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.className = 'toast'+(type==='error'?' error':'');
+    void t.offsetWidth;
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 4000);
+  }
+
+  // ---- Submit ----
+  document.getElementById('factura-form').addEventListener('submit', async function(e) {
+    e.preventDefault();
+
+    const req = ['malnom','iban','dataFactura','numFactura','concepte','proveidor','nifProveidor','importSenseIVA'];
+    let valid = true;
+    req.forEach(id => {
+      const el = document.getElementById(id);
+      if (!el.value.trim()) { el.style.borderColor='#ef4444'; valid=false; }
+      else el.style.borderColor='';
+    });
+    if (!document.getElementById('categoria').value) {
+      document.getElementById('categoria').style.borderColor='#ef4444'; valid=false;
+    }
+    if (!valid) { showToast('⚠️ Omple tots els camps obligatoris','error'); return; }
+
+    const btn = document.getElementById('btn-submit');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span>Enviant...';
+
+    let cat = document.getElementById('categoria').value;
+    const catC = document.getElementById('categoriaCustom').value.trim();
+    if ((cat==='Altra'||cat==='Esdeveniments') && catC) cat = catC;
+
+    const base = parseFloat(document.getElementById('importSenseIVA').value)||0;
+    let pIVAstr, qIVA;
+    if (ivaMode==='varis') {
+      pIVAstr='Varis'; qIVA=parseFloat(document.getElementById('importIVA').value)||0;
+    } else if (ivaMode==='custom') {
+      pIVAstr=String(parseFloat(document.getElementById('percIVACustom').value)||0);
+      qIVA=base*(parseFloat(pIVAstr)||0)/100;
+    } else {
+      pIVAstr=document.getElementById('percIVA').value;
+      qIVA=base*(parseFloat(pIVAstr)||0)/100;
+    }
+    const pIRPF=getPercIRPF();
+    const qIRPF=base*pIRPF/100;
+    const ambIVA=base+qIVA;
+
+    const payload = {
+      malnom:         document.getElementById('malnom').value.trim(),
+      iban:           document.getElementById('iban').value.trim().replace(/\s/g,''),
+      dataFactura:    document.getElementById('dataFactura').value,
+      numFactura:     document.getElementById('numFactura').value.trim(),
+      categoria:      cat,
+      concepte:       document.getElementById('concepte').value.trim(),
+      proveidor:      document.getElementById('proveidor').value.trim(),
+      nifProveidor:   document.getElementById('nifProveidor').value.trim(),
+      importSenseIVA: base.toFixed(2),
+      percIVA:        pIVAstr,
+      importIVA:      qIVA.toFixed(2),
+      percIRPF:       String(pIRPF),
+      importIRPF:     qIRPF.toFixed(2),
+      importAmbIVA:   ambIVA.toFixed(2),
+      importTotal:    (ambIVA-qIRPF).toFixed(2),
+      comentaris:     document.getElementById('comentaris').value.trim(),
+      arxius:         selectedFiles.map(f=>f.name).join(', ')
+    };
+
+    try {
+      const resp = await fetch(APPS_SCRIPT_URL, { method:'POST', body:JSON.stringify(payload) });
+      const result = await resp.json();
+      if (result.success) {
+        showToast('✅ Factura enviada correctament al tresorer!');
+        document.getElementById('factura-form').reset();
+        selectedFiles=[]; renderFiles(); ivaMode='normal';
+        ['categoria-custom-wrap','varis-iva-info'].forEach(id=>document.getElementById(id).classList.remove('visible'));
+        ['percIVACustom','percIRPFCustom'].forEach(id=>document.getElementById(id).classList.remove('visible'));
+        const ivaF = document.getElementById('importIVA');
+        ivaF.readOnly=true; ivaF.placeholder='Calculat';
+        recalcular();
+        window.scrollTo({top:0,behavior:'smooth'});
+      } else { throw new Error(result.error||'Error desconegut'); }
+    } catch(err) {
+      showToast('❌ Error en enviar: '+err.message,'error');
+    } finally {
+      btn.disabled=false; btn.innerHTML='Enviar factura';
+    }
+  });
+</script>
+</body>
+</html>
