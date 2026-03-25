@@ -224,16 +224,46 @@
     <div class="form-section">
       <div class="section-header"><div class="section-num">1</div><span class="section-title">Identificació del soci</span></div>
       <div class="section-body">
-        <div class="field-grid">
+        <div class="field-grid full" style="margin-bottom:16px;">
           <div class="field">
             <label for="malnom">Malnom del soci <span class="req">*</span></label>
             <input type="text" id="malnom" placeholder="El teu malnom a la colla" required>
           </div>
+        </div>
+
+        <!-- Qui ha pagat la factura? -->
+        <div class="field-grid full" style="margin-bottom:4px;">
           <div class="field">
-            <label for="iban">IBAN del soci <span class="req">*</span></label>
-            <input type="text" id="iban" placeholder="ES00 0000 0000 0000 0000 0000" required>
+            <label>La factura l'ha pagat el soci? <span class="req">*</span></label>
+            <div class="tipus-selector">
+              <label class="tipus-option" id="opt-pagat-si">
+                <input type="radio" name="haPagat" id="haPagat-si" value="si" required onchange="handleHaPagat('si')">
+                <div class="tipus-card">
+                  <div class="tipus-icon">✅</div>
+                  <div class="tipus-nom">Sí, l'he pagat jo</div>
+                  <div class="tipus-desc">La colla em reemborsarà l'import al meu compte bancari.</div>
+                </div>
+              </label>
+              <label class="tipus-option" id="opt-pagat-no">
+                <input type="radio" name="haPagat" id="haPagat-no" value="no" onchange="handleHaPagat('no')">
+                <div class="tipus-card">
+                  <div class="tipus-icon">🏦</div>
+                  <div class="tipus-nom">No, la pagarà la colla</div>
+                  <div class="tipus-desc">La colla pagarà directament al proveïdor. No cal reemborsament.</div>
+                </div>
+              </label>
+            </div>
           </div>
         </div>
+
+        <!-- IBAN — només visible si ha pagat el soci -->
+        <div id="iban-wrap" style="display:none; margin-top:12px;">
+          <div class="field">
+            <label for="iban">IBAN on vols rebre els diners <span class="req">*</span></label>
+            <input type="text" id="iban" placeholder="ES00 0000 0000 0000 0000 0000" autocomplete="off">
+          </div>
+        </div>
+
       </div>
     </div>
 
@@ -265,7 +295,10 @@
               </label>
             </div>
             <div class="tipus-info" id="tipus-info-factura">
-              ℹ️ Per obtenir una factura, demana-la al proveïdor indicant les dades de la colla: <strong>Colla Castellera Marrecs de Salt</strong> · NIF <strong>G17462771</strong>
+              ℹ️ Per obtenir una factura, demana-la al proveïdor indicant les dades de la colla:<br><br>
+              <strong>Colla Castellera Marrecs de Salt</strong><br>
+              NIF: <strong>G17462771</strong><br>
+              Carrer Sant Antoni 1, Coma-Cros, Salt 17190 Girona
             </div>
           </div>
         </div>
@@ -437,6 +470,20 @@
     }
   }
 
+  // ---- Qui ha pagat ----
+  function handleHaPagat(val) {
+    const wrap = document.getElementById('iban-wrap');
+    const ibanInput = document.getElementById('iban');
+    if (val === 'si') {
+      wrap.style.display = 'block';
+      ibanInput.required = true;
+    } else {
+      wrap.style.display = 'none';
+      ibanInput.required = false;
+      ibanInput.value = '';
+    }
+  }
+
   // ---- Categoria ----
   function handleCategoria(val) {
     const wrap = document.getElementById('categoria-custom-wrap');
@@ -586,7 +633,10 @@
   document.getElementById('factura-form').addEventListener('submit', async function(e) {
     e.preventDefault();
 
-    // Validació
+    // Definim btn i progWrap al principi perquè estiguin disponibles en totes les validacions
+    const btn      = document.getElementById('btn-submit');
+    const progWrap = document.getElementById('progress-wrap');
+
     // Validació codi secret (al client, ofuscat)
     const codiIntroduït = document.getElementById('codiSecret').value.trim();
     const codiHash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(codiIntroduït));
@@ -595,8 +645,6 @@
     const codiVàlid = 'a59463167151c4ddc505c64c3ed048c9407c04e8a8dacfd5aad411a9104bb32f';
     if (codiHex !== codiVàlid) {
       showToast('❌ Codi incorrecte. Contacta amb el tresorer.', 'error');
-      btn.disabled = false; btn.innerHTML = 'Enviar factura';
-      progWrap.classList.remove('visible');
       return;
     }
 
@@ -604,12 +652,28 @@
     const tipusDoc = document.querySelector('input[name="tipusDocument"]:checked');
     if (!tipusDoc) {
       showToast('⚠️ Selecciona si és una factura o un ticket', 'error');
-      btn.disabled = false; btn.innerHTML = 'Enviar factura';
-      progWrap.classList.remove('visible');
       return;
     }
 
-    const req = ['malnom','iban','dataFactura','numFactura','concepte','proveidor','nifProveidor','importSenseIVA'];
+    // Validació camps obligatoris
+    // Validació qui ha pagat
+    const haPagat = document.querySelector('input[name="haPagat"]:checked');
+    if (!haPagat) {
+      showToast('⚠️ Indica si has pagat la factura tu o la pagarà la colla', 'error');
+      return;
+    }
+    // Validació IBAN (només si ha pagat el soci)
+    if (haPagat.value === 'si') {
+      const ibanVal = document.getElementById('iban').value.trim();
+      if (!ibanVal) {
+        document.getElementById('iban').style.borderColor = '#ef4444';
+        showToast('⚠️ Introdueix el teu IBAN per rebre el reemborsament', 'error');
+        return;
+      }
+      document.getElementById('iban').style.borderColor = '';
+    }
+
+    const req = ['malnom','dataFactura','numFactura','concepte','proveidor','nifProveidor','importSenseIVA'];
     let valid = true;
     req.forEach(id => {
       const el = document.getElementById(id);
@@ -621,8 +685,7 @@
     }
     if (!valid) { showToast('⚠️ Omple tots els camps obligatoris','error'); return; }
 
-    const btn      = document.getElementById('btn-submit');
-    const progWrap = document.getElementById('progress-wrap');
+    // A partir d'aquí tot és vàlid — activem el mode "enviant"
     btn.disabled   = true;
     btn.innerHTML  = '<span class="spinner"></span>Enviant...';
     progWrap.classList.add('visible');
@@ -669,7 +732,9 @@
       tipusDocument:  tipusDoc.value,
       codiSecret:     codiIntroduït,
       malnom:         document.getElementById('malnom').value.trim(),
-      iban:           document.getElementById('iban').value.trim().replace(/\s/g,''),
+      haPagat:        haPagat.value,
+      iban:           haPagat.value === 'si' ? document.getElementById('iban').value.trim().replace(/\s/g,'') : '',
+
       dataFactura:    document.getElementById('dataFactura').value,
       numFactura:     document.getElementById('numFactura').value.trim(),
       categoria:      cat,
@@ -696,6 +761,8 @@
         // Reset
         document.getElementById('factura-form').reset();
         document.getElementById('codiSecret').value = '';
+        document.getElementById('iban-wrap').style.display = 'none';
+        document.getElementById('tipus-info-factura').classList.remove('visible');
         selectedFiles=[]; renderFiles(); ivaMode='normal';
         ['categoria-custom-wrap','varis-iva-info'].forEach(id=>document.getElementById(id).classList.remove('visible'));
         ['percIVACustom','percIRPFCustom'].forEach(id=>document.getElementById(id).classList.remove('visible'));
