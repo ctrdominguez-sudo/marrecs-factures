@@ -163,6 +163,19 @@
 
   <form id="factura-form" novalidate>
 
+    <!-- 0. Codi secret -->
+    <div class="form-section">
+      <div class="section-header"><div class="section-num">🔒</div><span class="section-title">Codi d'accés</span></div>
+      <div class="section-body">
+        <div class="field-grid full">
+          <div class="field">
+            <label for="codiSecret">Codi de la colla <span class="req">*</span></label>
+            <input type="password" id="codiSecret" placeholder="Introdueix el codi secret de la colla" required autocomplete="off">
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- 1. Soci -->
     <div class="form-section">
       <div class="section-header"><div class="section-num">1</div><span class="section-title">Identificació del soci</span></div>
@@ -490,6 +503,19 @@
     e.preventDefault();
 
     // Validació
+    // Validació codi secret (al client, ofuscat)
+    const codiIntroduït = document.getElementById('codiSecret').value.trim();
+    const codiHash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(codiIntroduït));
+    const codiHex = Array.from(new Uint8Array(codiHash)).map(b => b.toString(16).padStart(2,'0')).join('');
+    // Hash SHA-256 de "3d9fal2026"
+    const codiVàlid = 'a59463167151c4ddc505c64c3ed048c9407c04e8a8dacfd5aad411a9104bb32f';
+    if (codiHex !== codiVàlid) {
+      showToast('❌ Codi incorrecte. Contacta amb el tresorer.', 'error');
+      btn.disabled = false; btn.innerHTML = 'Enviar factura';
+      progWrap.classList.remove('visible');
+      return;
+    }
+
     const req = ['malnom','iban','dataFactura','numFactura','concepte','proveidor','nifProveidor','importSenseIVA'];
     let valid = true;
     req.forEach(id => {
@@ -547,6 +573,7 @@
     setProgress(60, 'Enviant al servidor...');
 
     const payload = {
+      codiSecret:     codiIntroduït,
       malnom:         document.getElementById('malnom').value.trim(),
       iban:           document.getElementById('iban').value.trim().replace(/\s/g,''),
       dataFactura:    document.getElementById('dataFactura').value,
@@ -574,6 +601,7 @@
         showToast('✅ Factura enviada correctament! Els arxius són a Google Drive.');
         // Reset
         document.getElementById('factura-form').reset();
+        document.getElementById('codiSecret').value = '';
         selectedFiles=[]; renderFiles(); ivaMode='normal';
         ['categoria-custom-wrap','varis-iva-info'].forEach(id=>document.getElementById(id).classList.remove('visible'));
         ['percIVACustom','percIRPFCustom'].forEach(id=>document.getElementById(id).classList.remove('visible'));
