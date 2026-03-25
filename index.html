@@ -129,6 +129,50 @@
   .toast.error { background:#ef4444; color:white; }
   .spinner { display:inline-block; width:16px; height:16px; border:2px solid rgba(255,255,255,0.3); border-top-color:white; border-radius:50%; animation:spin 0.7s linear infinite; vertical-align:middle; margin-right:8px; }
   @keyframes spin { to { transform:rotate(360deg); } }
+
+  /* Tipus de document selector */
+  .tipus-selector {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-top: 2px;
+  }
+  .tipus-option { cursor: pointer; display: block; }
+  .tipus-option input[type="radio"] { display: none; }
+  .tipus-card {
+    border: 2px solid var(--gray);
+    border-radius: 6px;
+    padding: 14px 16px;
+    background: var(--mid);
+    transition: border-color 0.2s, background 0.2s;
+    user-select: none;
+  }
+  .tipus-card:hover { border-color: var(--blue); }
+  .tipus-option input[type="radio"]:checked + .tipus-card {
+    border-color: var(--blue);
+    background: rgba(27,108,168,0.12);
+    box-shadow: 0 0 0 1px rgba(27,108,168,0.3);
+  }
+  .tipus-icon { font-size: 24px; margin-bottom: 6px; }
+  .tipus-nom { font-weight: 600; font-size: 14px; color: var(--text); margin-bottom: 4px; }
+  .tipus-desc { font-size: 12px; color: var(--text-dim); line-height: 1.5; }
+  .tipus-desc strong { color: #5bb3e8; }
+  .tipus-info {
+    display: none;
+    margin-top: 10px;
+    padding: 10px 14px;
+    background: rgba(27,108,168,0.1);
+    border: 1px solid rgba(27,108,168,0.4);
+    border-radius: 4px;
+    font-size: 12px;
+    color: #7dd4fc;
+    line-height: 1.6;
+  }
+  .tipus-info strong { color: white; }
+  .tipus-info.visible { display: block; }
+  @media (max-width: 500px) {
+    .tipus-selector { grid-template-columns: 1fr; }
+  }
   @media (max-width:600px) {
     header { padding:14px 16px; }
     main { padding:20px 14px 60px; }
@@ -197,14 +241,43 @@
     <div class="form-section">
       <div class="section-header"><div class="section-num">2</div><span class="section-title">Dades de la factura</span></div>
       <div class="section-body">
+
+        <!-- Tipus de document -->
+        <div class="field-grid full" style="margin-bottom:18px;">
+          <div class="field">
+            <label>Tipus de document <span class="req">*</span></label>
+            <div class="tipus-selector">
+              <label class="tipus-option" id="opt-factura">
+                <input type="radio" name="tipusDocument" id="tipusFactura" value="Factura" required onchange="handleTipus('Factura')">
+                <div class="tipus-card">
+                  <div class="tipus-icon">🧾</div>
+                  <div class="tipus-nom">Factura</div>
+                  <div class="tipus-desc">Document oficial amb les dades de la Colla (NIF G17462771). Permet desgravar la despesa. <strong>Preferible sempre que sigui possible.</strong></div>
+                </div>
+              </label>
+              <label class="tipus-option" id="opt-ticket">
+                <input type="radio" name="tipusDocument" id="tipusTicket" value="Ticket" onchange="handleTipus('Ticket')">
+                <div class="tipus-card">
+                  <div class="tipus-icon">🎟️</div>
+                  <div class="tipus-nom">Ticket / Rebut</div>
+                  <div class="tipus-desc">Comprovant de compra sense les dades de la Colla. Més difícil de desgravar, però vàlid com a justificant.</div>
+                </div>
+              </label>
+            </div>
+            <div class="tipus-info" id="tipus-info-factura">
+              ℹ️ Per obtenir una factura, demana-la al proveïdor indicant les dades de la colla: <strong>Colla Castellera Marrecs de Salt</strong> · NIF <strong>G17462771</strong>
+            </div>
+          </div>
+        </div>
+
         <div class="field-grid three">
           <div class="field">
-            <label for="dataFactura">Data factura <span class="req">*</span></label>
+            <label for="dataFactura">Data document <span class="req">*</span></label>
             <input type="date" id="dataFactura" required>
           </div>
           <div class="field">
-            <label for="numFactura">Número factura <span class="req">*</span></label>
-            <input type="text" id="numFactura" placeholder="p.ex. F-2024-001" required>
+            <label for="numFactura">Número factura / ticket <span class="req">*</span></label>
+            <input type="text" id="numFactura" placeholder="p.ex. F-2024-001 o T-001" required>
           </div>
           <div class="field">
             <label for="categoria">Categoria <span class="req">*</span></label>
@@ -352,6 +425,17 @@
   // =====================================================
   const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwvMVO3XmgVGfrG43KoPWJaSXDMSIhPTNGqV4lIOVAj69gBoD5NyESZQBH9Kpgc8_Xk/exec';
   // =====================================================
+
+
+  // ---- Tipus de document ----
+  function handleTipus(val) {
+    const info = document.getElementById('tipus-info-factura');
+    if (val === 'Factura') {
+      info.classList.add('visible');
+    } else {
+      info.classList.remove('visible');
+    }
+  }
 
   // ---- Categoria ----
   function handleCategoria(val) {
@@ -516,6 +600,15 @@
       return;
     }
 
+    // Validació tipus document
+    const tipusDoc = document.querySelector('input[name="tipusDocument"]:checked');
+    if (!tipusDoc) {
+      showToast('⚠️ Selecciona si és una factura o un ticket', 'error');
+      btn.disabled = false; btn.innerHTML = 'Enviar factura';
+      progWrap.classList.remove('visible');
+      return;
+    }
+
     const req = ['malnom','iban','dataFactura','numFactura','concepte','proveidor','nifProveidor','importSenseIVA'];
     let valid = true;
     req.forEach(id => {
@@ -573,6 +666,7 @@
     setProgress(60, 'Enviant al servidor...');
 
     const payload = {
+      tipusDocument:  tipusDoc.value,
       codiSecret:     codiIntroduït,
       malnom:         document.getElementById('malnom').value.trim(),
       iban:           document.getElementById('iban').value.trim().replace(/\s/g,''),
