@@ -188,6 +188,19 @@
   }
   .ia-chip-icon { font-size: 11px; }
 
+  .ia-summary-warning {
+    margin-top: 14px;
+    padding: 10px 14px;
+    background: rgba(232,119,34,0.08);
+    border: 1px solid rgba(232,119,34,0.25);
+    border-radius: 6px;
+    font-size: 13px;
+    color: var(--text);
+    line-height: 1.55;
+  }
+  .ia-summary-warning strong { font-weight: 600; }
+  .ia-summary-warning:empty { display: none; }
+
   /* SECCIONS DEL FORMULARI */
   .form-section {
     background: var(--surface);
@@ -750,6 +763,7 @@
       <span class="ia-summary-subtitle" id="ia-summary-count"></span>
     </div>
     <div class="ia-chips" id="ia-chips"></div>
+    <div class="ia-summary-warning" id="ia-summary-warning"></div>
   </div>
 
 
@@ -852,14 +866,6 @@
 
         <div class="field-grid three">
           <div class="field">
-            <label for="dataFactura">Data document <span class="req">*</span></label>
-            <input type="date" id="dataFactura" required>
-          </div>
-          <div class="field">
-            <label for="numFactura">Número factura / ticket <span class="req">*</span></label>
-            <input type="text" id="numFactura" placeholder="p.ex. F-2024-001 o T-001" required>
-          </div>
-          <div class="field">
             <label for="categoria">Categoria <span class="req">*</span></label>
             <select id="categoria" required onchange="handleCategoria(this.value)">
               <option value="">— Selecciona —</option>
@@ -874,6 +880,14 @@
             <div id="categoria-custom-wrap">
               <input type="text" id="categoriaCustom" placeholder="Escriu la categoria o l'esdeveniment">
             </div>
+          </div>
+          <div class="field">
+            <label for="dataFactura">Data document <span class="req">*</span></label>
+            <input type="date" id="dataFactura" required>
+          </div>
+          <div class="field">
+            <label for="numFactura">Número factura / ticket <span class="req">*</span></label>
+            <input type="text" id="numFactura" placeholder="p.ex. F-2024-001 o T-001" required>
           </div>
         </div>
         <div class="field-grid full" style="margin-top:14px;">
@@ -1121,8 +1135,9 @@
     { id: 'nifProveidor',   label: 'NIF proveïdor' },
     { id: 'concepte',       label: 'Concepte' },
     { id: 'importSenseIVA', label: 'Import s/IVA', format: 'eur' },
-    { id: 'percIVA',        label: '% IVA', format: 'pct' },
-    { id: 'percIRPF',       label: '% IRPF', format: 'pct' }
+    // Aquests dos sempre tenen un valor (0 és vàlid), per tant no surten mai com a pendents
+    { id: 'percIVA',        label: '% IVA',  format: 'pct', sempreOK: true },
+    { id: 'percIRPF',       label: '% IRPF', format: 'pct', sempreOK: true }
   ];
 
   function netejarMarcatgeIA() {
@@ -1138,7 +1153,7 @@
   }
 
   function valorBuit(v) {
-    return v === null || v === undefined || v === '' || v === 0 || v === '0';
+    return v === null || v === undefined || v === '';
   }
 
   function actualitzarResumIA(dades) {
@@ -1151,11 +1166,17 @@
     const chips = [];
 
     CAMPS_IA.forEach(camp => {
-      const valor = dades[camp.id];
+      let valor = dades[camp.id];
+
+      // Per als camps "sempreOK" (% IVA, % IRPF), si no hi ha valor assumim 0
+      if (camp.sempreOK && valorBuit(valor)) {
+        valor = 0;
+      }
+
       const buit = valorBuit(valor);
 
       if (!buit) {
-        // Mostrem com a OK
+        // Mostrem com a OK (verd)
         let valStr = String(valor);
         if (camp.format === 'eur') valStr = parseFloat(valor).toFixed(2) + ' €';
         if (camp.format === 'pct') valStr = valor + '%';
@@ -1165,7 +1186,7 @@
         </span>`);
         nOk++;
       } else {
-        // Mostrem com a pendent (només si és un camp obligatori essencial)
+        // Mostrem com a pendent (taronja)
         chips.push(`<span class="ia-chip missing">
           <span class="ia-chip-icon">⚠</span>
           <span>${camp.label}</span>
@@ -1183,6 +1204,14 @@
       countEl.textContent = `${nOk}/${total} camps detectats · ${nMissing} pendents`;
       countEl.style.color = 'var(--text-dim)';
     }
+
+    // Avís de comprovació del total — sempre visible, perquè és important
+    const avis = document.getElementById('ia-summary-warning');
+    if (avis) {
+      const totalCalculat = document.getElementById('importTotal').value;
+      avis.innerHTML = `💡 <strong>Comprova que l'import total <span style="color:var(--blau-ter-dark)">${escapeHtml(totalCalculat || '—')}</span> coincideix amb el de la factura.</strong>`;
+    }
+
     summary.classList.add('visible');
   }
 
