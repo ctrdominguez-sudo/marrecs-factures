@@ -699,9 +699,22 @@
       if (numMatch2) dades.numFactura = numMatch2[1];
     }
 
-    // NIF/CIF del proveïdor
-    const nifMatch = text.match(/([A-Z]\d{7}[A-Z0-9]|\d{8}[A-Z])/);
-    if (nifMatch) dades.nifProveidor = nifMatch[1];
+    // NIF/CIF del proveïdor — buscar TOTS els NIFs i descartar el de la Colla (G17462771)
+    // Acceptem formats amb espais/guions: B12345678, B-12345678, B 12345678
+    const NIF_COLLA = 'G17462771';
+    const nifPattern = /\b([A-Z][\s\-]?\d{7}[\s\-]?[A-Z0-9]|\d{8}[\s\-]?[A-Z])\b/g;
+    const nifsTrobats = [];
+    let nifM;
+    while ((nifM = nifPattern.exec(text)) !== null) {
+      // Netegem espais i guions per comparar
+      const nifNet = nifM[1].replace(/[\s\-]/g, '').toUpperCase();
+      if (nifNet !== NIF_COLLA && !nifsTrobats.includes(nifNet)) {
+        nifsTrobats.push(nifNet);
+      }
+    }
+    if (nifsTrobats.length > 0) {
+      dades.nifProveidor = nifsTrobats[0];  // El primer que no sigui de la Colla
+    }
 
     // Proveïdor — normalment és la primera línia amb text
     for (let i = 0; i < Math.min(5, lines.length); i++) {
@@ -712,9 +725,38 @@
       }
     }
 
-    // IVA
-    const ivaMatch = text.match(/IVA\s*(\d+)\s*%/i) || text.match(/(\d+)\s*%\s*IVA/i);
-    if (ivaMatch) dades.percIVA = ivaMatch[1];
+    // IVA — diversos casos:
+    // 1) Apareix "exempt", "sense IVA", "no subjecte", "0% IVA", "IVA 0%": forcem 0%
+    // 2) Apareix "IVA X%" amb X != 0: agafem aquest valor
+    // 3) Si no hi ha cap menció clara però la base coincideix amb el total: forcem 0%
+    const exemptPatterns = [
+      /EXEMPT/i,
+      /EXENTO/i,
+      /SENSE\s*IVA/i,
+      /SIN\s*IVA/i,
+      /NO\s*SUBJECTE/i,
+      /NO\s*SUJETO/i,
+      /IVA\s*NO\s*INCLOS/i,
+      /IVA\s*0\s*[%,\.]/i,
+      /0\s*%\s*IVA/i,
+      /IVA\s*0\s*,\s*00/i,
+      /IVA\s*0\s*\.\s*00/i
+    ];
+    let ivaExempt = exemptPatterns.some(p => p.test(text));
+
+    if (ivaExempt) {
+      dades.percIVA = '0';
+    } else {
+      // Buscar percentatge d'IVA. Ignorem 0 (ja l'hauríem agafat abans).
+      const ivaMatch = text.match(/IVA\s*(\d{1,2})\s*%/i) || text.match(/(\d{1,2})\s*%\s*IVA/i);
+      if (ivaMatch && parseInt(ivaMatch[1]) > 0) {
+        dades.percIVA = ivaMatch[1];
+      } else {
+        // Si no hi ha cap senyal clar, deixem 21 provisionalment;
+        // es validarà més avall comparant base i total.
+        dades.percIVA = '21';
+      }
+    }
 
     // Imports — busquem patrons de preu
     const preuPatron = /(\d+[.,]\d{2})/g;
@@ -733,22 +775,30 @@
     }
 
     // Base imposable (sense IVA)
-    const baseMatch = text.match(/(?:BASE|BASE IMPONIBLE|SUBTOTAL)[^\d]*(\d+[.,]\d{2})/i);
+    const baseMatch = text.match(/(?:BASE\s*IMPONIBLE|BASE\s*IMPOSABLE|BASE|SUBTOTAL)[^\d]*(\d+[.,]\d{2})/i);
     if (baseMatch) {
       dades.importSenseIVA = parseFloat(baseMatch[1].replace(',', '.')).toFixed(2);
     } else if (dades.importAmbIVA) {
-      const perc = parseInt(dades.percIVA) || 21;
+      const perc = parseInt(dades.percIVA) || 0;
       const base = parseFloat(dades.importAmbIVA) / (1 + perc/100);
       dades.importSenseIVA = base.toFixed(2);
     }
 
-    // Import IVA
-    const ivaImportMatch = text.match(/(?:CUOTA IVA|QUOTA IVA|IVA)[^\d]*(\d+[.,]\d{2})/i);
-    if (ivaImportMatch) {
-      dades.importIVA = parseFloat(ivaImportMatch[1].replace(',', '.')).toFixed(2);
-    } else if (dades.importSenseIVA && dades.importAmbIVA) {
-      dades.importIVA = (parseFloat(dades.importAmbIVA) - parseFloat(dades.importSenseIVA)).toFixed(2);
+    // VALIDACIÓ FINAL: si la base i el total són pràcticament iguals, no hi ha IVA.
+    // Cas típic de factures exemptes on no apareix explícitament "exempt".
+    if (dades.importSenseIVA && dades.importAmbIVA) {
+      const baseN = parseFloat(dades.importSenseIVA);
+      const totalN = parseFloat(dades.importAmbIVA);
+      if (Math.abs(baseN - totalN) < 0.02) {  // tolerància de 2 cèntims
+        dades.percIVA = '0';
+        dades.importSenseIVA = totalN.toFixed(2);
+      }
     }
+
+    // Import IVA — sempre el recalculem en funció de la base i el %
+    const baseNum = parseFloat(dades.importSenseIVA) || 0;
+    const percNum = parseFloat(dades.percIVA) || 0;
+    dades.importIVA = (baseNum * percNum / 100).toFixed(2);
 
     // IRPF
     const irpfMatch = text.match(/IRPF\s*(\d+)\s*%/i) || text.match(/RETENCI[ÓO]N?\s*(\d+)\s*%/i);
