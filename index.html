@@ -290,10 +290,10 @@
 
   <form id="factura-form" novalidate>
 
-  <!-- ESCANER DE FACTURA AMB IA -->
+  <!-- ESCANER DE FACTURA AMB OCR -->
   <div class="scan-section">
-    <div class="scan-title">📷 Escaneja la factura amb IA</div>
-    <div class="scan-desc">Fes una foto o puja una imatge i Claude llegirà les dades automàticament.<br>Podràs revisar i corregir abans d'enviar.</div>
+    <div class="scan-title">📷 Escaneja la factura</div>
+    <div class="scan-desc">Fes una foto o puja una imatge/PDF i el sistema llegirà el text automàticament.<br>Podràs revisar i corregir les dades abans d'enviar.</div>
     <div class="scan-buttons">
       <button type="button" class="btn-scan" onclick="document.getElementById('scan-camera').click()">
         📷 Obrir càmera
@@ -578,7 +578,7 @@
   }
 
 
-  // ---- Escaneig de factura amb IA ----
+  // ---- Escaneig de factura amb OCR de Google Drive ----
   async function processarEscaneig(input) {
     if (!input.files || !input.files[0]) return;
     const fitxer = input.files[0];
@@ -595,8 +595,16 @@
       preview.classList.remove('visible');
     }
 
+    // Validació de mida (Drive OCR funciona millor amb fitxers < 5 MB)
+    if (fitxer.size > 10 * 1024 * 1024) {
+      status.className = 'scan-status error';
+      status.innerHTML = "❌ El fitxer supera els 10 MB. Fes una foto més comprimida o omple el formulari manualment.";
+      input.value = '';
+      return;
+    }
+
     status.className = 'scan-status loading';
-    status.innerHTML = '<span class="scan-spinner"></span>Analitzant la factura amb IA...';
+    status.innerHTML = '<span class="scan-spinner"></span>Pujant el fitxer i extraient el text...';
 
     try {
       // Convertim a base64
@@ -607,28 +615,31 @@
         r.readAsDataURL(fitxer);
       });
 
-      const esPDF = fitxer.type === 'application/pdf';
+      // Crida a l'Apps Script amb action=ocr
+      // L'Apps Script puja el fitxer a Drive amb OCR activat, extreu el text, i l'esborra
+      const resp = await fetch(APPS_SCRIPT_URL, {
+        method: 'POST',
+        body: JSON.stringify({
+          action: 'ocr',
+          fitxer: {
+            name: fitxer.name,
+            type: fitxer.type,
+            data: base64
+          }
+        })
+      });
 
-      // Pas 1: Google Cloud Vision — extraiem el text de la imatge
-      const visionResp = await fetch(
-        'https://vision.googleapis.com/v1/images:annotate?key=AIzaSyB5Av2BYf5oeVqWDxGxx6PyyjgOCWiuk0g',
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            requests: [{
-              image: { content: base64 },
-              features: [{ type: 'DOCUMENT_TEXT_DETECTION', maxResults: 1 }]
-            }]
-          })
-        }
-      );
-      const visionData = await visionResp.json();
-      if (visionData.error) throw new Error(visionData.error.message);
-      const textExtret = visionData.responses?.[0]?.fullTextAnnotation?.text || '';
-      if (!textExtret) throw new Error("No s'ha pogut llegir text de la imatge");
+      if (!resp.ok) throw new Error('Error del servidor: ' + resp.status);
+      const result = await resp.json();
+      if (!result.success) throw new Error(result.error || 'Error desconegut del servidor');
 
-      // Pas 2: Analitzem el text extret per omplir els camps
+      const textExtret = result.text || '';
+      if (!textExtret.trim()) throw new Error("No s'ha pogut llegir text de la imatge");
+
+      status.className = 'scan-status loading';
+      status.innerHTML = '<span class="scan-spinner"></span>Interpretant les dades de la factura...';
+
+      // Analitzem el text extret per omplir els camps
       const dades = interpretarText(textExtret);
 
       // Omplim el formulari amb les dades extretes
@@ -640,7 +651,7 @@
     } catch(err) {
       console.error('Error escaneig:', err);
       status.className = 'scan-status error';
-      status.innerHTML = "❌ No s'han pogut llegir les dades. Omple el formulari manualment.";
+      status.innerHTML = "❌ No s'han pogut llegir les dades: " + err.message + ". Omple el formulari manualment.";
     }
 
     // Resetegem l'input per permetre tornar a seleccionar el mateix fitxer
