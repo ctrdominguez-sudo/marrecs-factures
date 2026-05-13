@@ -578,7 +578,7 @@
   }
 
 
-  // ---- Escaneig de factura amb OCR de Google Drive ----
+  // ---- Escaneig de factura amb Claude (IA) ----
   async function processarEscaneig(input) {
     if (!input.files || !input.files[0]) return;
     const fitxer = input.files[0];
@@ -595,7 +595,7 @@
       preview.classList.remove('visible');
     }
 
-    // Validació de mida (Drive OCR funciona millor amb fitxers < 5 MB)
+    // Validació de mida (límit raonable per a Claude API)
     if (fitxer.size > 10 * 1024 * 1024) {
       status.className = 'scan-status error';
       status.innerHTML = "❌ El fitxer supera els 10 MB. Fes una foto més comprimida o omple el formulari manualment.";
@@ -604,7 +604,7 @@
     }
 
     status.className = 'scan-status loading';
-    status.innerHTML = '<span class="scan-spinner"></span>Pujant el fitxer i extraient el text... (pot trigar uns segons)';
+    status.innerHTML = '<span class="scan-spinner"></span>Analitzant la factura amb IA... (pot trigar uns segons)';
 
     try {
       // Convertim a base64
@@ -615,12 +615,12 @@
         r.readAsDataURL(fitxer);
       });
 
-      // Crida a l'Apps Script amb action=ocr
-      // L'Apps Script puja el fitxer a Drive amb OCR activat, extreu el text, i l'esborra
+      // Crida a l'Apps Script amb action=extract
+      // L'Apps Script crida Claude API i ens torna el JSON ja estructurat
       const resp = await fetch(APPS_SCRIPT_URL, {
         method: 'POST',
         body: JSON.stringify({
-          action: 'ocr',
+          action: 'extract',
           fitxer: {
             name: fitxer.name,
             type: fitxer.type,
@@ -633,14 +633,8 @@
       const result = await resp.json();
       if (!result.success) throw new Error(result.error || 'Error desconegut del servidor');
 
-      const textExtret = result.text || '';
-      if (!textExtret.trim()) throw new Error("No s'ha pogut llegir text de la imatge");
-
-      status.className = 'scan-status loading';
-      status.innerHTML = '<span class="scan-spinner"></span>Interpretant les dades de la factura...';
-
-      // Analitzem el text extret per omplir els camps
-      const dades = interpretarText(textExtret);
+      const dades = result.dades;
+      if (!dades) throw new Error("Claude no ha retornat dades");
 
       // Omplim el formulari amb les dades extretes
       omplirFormulari(dades);
@@ -658,168 +652,6 @@
     input.value = '';
   }
 
-
-  // ---- Interpretació del text extret per Google Vision ----
-  function interpretarText(text) {
-    const lines = text.split('\n').map(l => l.trim()).filter(l => l);
-    const tot = text.toUpperCase();
-    const dades = {
-      tipusDocument: '', dataFactura: '', numFactura: '', proveidor: '',
-      nifProveidor: '', concepte: '', importSenseIVA: '', percIVA: '21',
-      importIVA: '', importAmbIVA: '', percIRPF: '0', importIRPF: '0.00'
-    };
-
-    // Tipus de document
-    if (/FACTURA/i.test(text)) dades.tipusDocument = 'Factura';
-    else if (/TICKET|REBUT|RECIBO|RECEIPT/i.test(text)) dades.tipusDocument = 'Ticket';
-    else dades.tipusDocument = 'Ticket';
-
-    // Data — formats: DD/MM/YYYY, DD-MM-YYYY, YYYY-MM-DD
-    const dataMatch = text.match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/);
-    if (dataMatch) {
-      let [_, d, m, y] = dataMatch;
-      if (y.length === 2) y = '20' + y;
-      if (parseInt(d) > 12) { // DD/MM/YYYY
-        dades.dataFactura = `${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`;
-      } else {
-        dades.dataFactura = `${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`;
-      }
-    }
-    const dataMatch2 = text.match(/(\d{4})[\/\-](\d{2})[\/\-](\d{2})/);
-    if (dataMatch2 && !dataMatch) {
-      dades.dataFactura = dataMatch2[0];
-    }
-
-    // Número de factura
-    const numMatch = text.match(/(?:N[úu]m(?:ero)?\.?\s*(?:factura)?|Factura\s*N[°º]?|N[°º]|#)\s*:?\s*([A-Z0-9\/\-]+)/i);
-    if (numMatch) dades.numFactura = numMatch[1];
-    else {
-      // Busquem patró de número de factura comú
-      const numMatch2 = text.match(/([A-Z]{1,3}[\-\/]?\d{4,}[\-\/]?\d*)/);
-      if (numMatch2) dades.numFactura = numMatch2[1];
-    }
-
-    // NIF/CIF del proveïdor — buscar TOTS els NIFs i descartar el de la Colla (G17462771)
-    // Acceptem formats amb espais/guions: B12345678, B-12345678, B 12345678
-    const NIF_COLLA = 'G17462771';
-    const nifPattern = /\b([A-Z][\s\-]?\d{7}[\s\-]?[A-Z0-9]|\d{8}[\s\-]?[A-Z])\b/g;
-    const nifsTrobats = [];
-    let nifM;
-    while ((nifM = nifPattern.exec(text)) !== null) {
-      // Netegem espais i guions per comparar
-      const nifNet = nifM[1].replace(/[\s\-]/g, '').toUpperCase();
-      if (nifNet !== NIF_COLLA && !nifsTrobats.includes(nifNet)) {
-        nifsTrobats.push(nifNet);
-      }
-    }
-    if (nifsTrobats.length > 0) {
-      dades.nifProveidor = nifsTrobats[0];  // El primer que no sigui de la Colla
-    }
-
-    // Proveïdor — normalment és la primera línia amb text
-    for (let i = 0; i < Math.min(5, lines.length); i++) {
-      const l = lines[i];
-      if (l.length > 3 && l.length < 60 && !/^\d/.test(l) && !/^[A-Z]\d{7}/.test(l)) {
-        dades.proveidor = l;
-        break;
-      }
-    }
-
-    // IVA — diversos casos:
-    // 1) Apareix "exempt", "sense IVA", "no subjecte", "0% IVA", "IVA 0%": forcem 0%
-    // 2) Apareix "IVA X%" amb X != 0: agafem aquest valor
-    // 3) Si no hi ha cap menció clara però la base coincideix amb el total: forcem 0%
-    const exemptPatterns = [
-      /EXEMPT/i,
-      /EXENTO/i,
-      /SENSE\s*IVA/i,
-      /SIN\s*IVA/i,
-      /NO\s*SUBJECTE/i,
-      /NO\s*SUJETO/i,
-      /IVA\s*NO\s*INCLOS/i,
-      /IVA\s*0\s*[%,\.]/i,
-      /0\s*%\s*IVA/i,
-      /IVA\s*0\s*,\s*00/i,
-      /IVA\s*0\s*\.\s*00/i
-    ];
-    let ivaExempt = exemptPatterns.some(p => p.test(text));
-
-    if (ivaExempt) {
-      dades.percIVA = '0';
-    } else {
-      // Buscar percentatge d'IVA. Ignorem 0 (ja l'hauríem agafat abans).
-      const ivaMatch = text.match(/IVA\s*(\d{1,2})\s*%/i) || text.match(/(\d{1,2})\s*%\s*IVA/i);
-      if (ivaMatch && parseInt(ivaMatch[1]) > 0) {
-        dades.percIVA = ivaMatch[1];
-      } else {
-        // Si no hi ha cap senyal clar, deixem 21 provisionalment;
-        // es validarà més avall comparant base i total.
-        dades.percIVA = '21';
-      }
-    }
-
-    // Imports — busquem patrons de preu
-    const preuPatron = /(\d+[.,]\d{2})/g;
-    const preus = [];
-    let m2;
-    while ((m2 = preuPatron.exec(text)) !== null) {
-      preus.push(parseFloat(m2[1].replace(',', '.')));
-    }
-
-    // Import total — busquem "total" o "import" o l'import més gran
-    const totalMatch = text.match(/(?:TOTAL|IMPORTE TOTAL|TOTAL A PAGAR)[^\d]*(\d+[.,]\d{2})/i);
-    if (totalMatch) {
-      dades.importAmbIVA = parseFloat(totalMatch[1].replace(',', '.')).toFixed(2);
-    } else if (preus.length > 0) {
-      dades.importAmbIVA = Math.max(...preus).toFixed(2);
-    }
-
-    // Base imposable (sense IVA)
-    const baseMatch = text.match(/(?:BASE\s*IMPONIBLE|BASE\s*IMPOSABLE|BASE|SUBTOTAL)[^\d]*(\d+[.,]\d{2})/i);
-    if (baseMatch) {
-      dades.importSenseIVA = parseFloat(baseMatch[1].replace(',', '.')).toFixed(2);
-    } else if (dades.importAmbIVA) {
-      const perc = parseInt(dades.percIVA) || 0;
-      const base = parseFloat(dades.importAmbIVA) / (1 + perc/100);
-      dades.importSenseIVA = base.toFixed(2);
-    }
-
-    // VALIDACIÓ FINAL: si la base i el total són pràcticament iguals, no hi ha IVA.
-    // Cas típic de factures exemptes on no apareix explícitament "exempt".
-    if (dades.importSenseIVA && dades.importAmbIVA) {
-      const baseN = parseFloat(dades.importSenseIVA);
-      const totalN = parseFloat(dades.importAmbIVA);
-      if (Math.abs(baseN - totalN) < 0.02) {  // tolerància de 2 cèntims
-        dades.percIVA = '0';
-        dades.importSenseIVA = totalN.toFixed(2);
-      }
-    }
-
-    // Import IVA — sempre el recalculem en funció de la base i el %
-    const baseNum = parseFloat(dades.importSenseIVA) || 0;
-    const percNum = parseFloat(dades.percIVA) || 0;
-    dades.importIVA = (baseNum * percNum / 100).toFixed(2);
-
-    // IRPF
-    const irpfMatch = text.match(/IRPF\s*(\d+)\s*%/i) || text.match(/RETENCI[ÓO]N?\s*(\d+)\s*%/i);
-    if (irpfMatch) dades.percIRPF = irpfMatch[1];
-
-    // Concepte — busquem descripció
-    const conceptePatterns = ['CONCEPTE', 'CONCEPTO', 'DESCRIPCI', 'SERVICI', 'PRODUCTE'];
-    for (const pat of conceptePatterns) {
-      const idx = tot.indexOf(pat);
-      if (idx >= 0) {
-        const segment = text.slice(idx, idx + 100);
-        const parts = segment.split('\n');
-        if (parts[1]) { dades.concepte = parts[1].trim().slice(0, 60); break; }
-      }
-    }
-    if (!dades.concepte && lines.length > 1) {
-      dades.concepte = lines[Math.min(2, lines.length-1)].slice(0, 60);
-    }
-
-    return dades;
-  }
 
   function omplirFormulari(dades) {
     // Tipus de document
