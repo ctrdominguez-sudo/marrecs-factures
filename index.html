@@ -571,7 +571,39 @@
     .logo-wrap img { height:38px; }
     .page-intro h2 { font-size: 22px; }
     .scan-title { font-size: 19px; }
+    .site-footer { flex-direction: column; gap: 6px; text-align: center; }
   }
+
+  /* PEU DE PÀGINA */
+  .site-footer {
+    margin-top: 40px;
+    padding: 18px 22px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 14px;
+    font-size: 12.5px;
+    color: var(--text-dim);
+    line-height: 1.5;
+  }
+  .footer-link {
+    background: none;
+    border: none;
+    color: var(--blau-ter);
+    font-family: var(--font-sans);
+    font-size: 12.5px;
+    font-weight: 600;
+    cursor: pointer;
+    padding: 4px 0;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    transition: color 0.15s;
+    flex-shrink: 0;
+  }
+  .footer-link:hover { color: var(--taronja); }
 </style>
 </head>
 <body>
@@ -874,6 +906,11 @@
     </div>
 
   </form>
+
+  <footer class="site-footer">
+    <span>Les dades del malnom i IBAN es guarden només al teu navegador per comoditat.</span>
+    <button type="button" class="footer-link" onclick="if(confirm('Vols esborrar el malnom i IBAN guardats en aquest navegador?')) esborrarDadesGuardades()">Esborrar les meves dades</button>
+  </footer>
 </main>
 
 <div class="toast" id="toast"></div>
@@ -958,8 +995,12 @@
       // Omplim el formulari amb les dades extretes
       omplirFormulari(dades);
 
+      // Adjuntem automàticament el fitxer escanejat com a adjunt del formulari
+      // (perquè no calgui pujar-lo dues vegades)
+      adjuntarFitxerEscanejat(fitxer);
+
       status.className = 'scan-status ok';
-      status.innerHTML = '✅ Dades extretes correctament! Revisa i corregeix si cal.';
+      status.innerHTML = '✅ Dades extretes i fitxer adjuntat correctament! Revisa i corregeix si cal.';
 
     } catch(err) {
       console.error('Error escaneig:', err);
@@ -1150,10 +1191,21 @@
     if (val === 'si') {
       wrap.style.display = 'block';
       ibanInput.required = true;
+      // Si el camp està buit i tenim un IBAN guardat al navegador, el restaurem
+      if (!ibanInput.value) {
+        try {
+          const raw = localStorage.getItem('marrecs_factures_user_v1');
+          if (raw) {
+            const dades = JSON.parse(raw);
+            if (dades.iban) ibanInput.value = dades.iban;
+          }
+        } catch(_) {}
+      }
     } else {
       wrap.style.display = 'none';
       ibanInput.required = false;
-      ibanInput.value = '';
+      // Important: NO buidem ibanInput.value perquè es manté guardat
+      // (només es netejaria si l'usuari fa "Esborrar les meves dades")
     }
   }
 
@@ -1252,6 +1304,17 @@
       if (f.size > 10*1024*1024) { showToast('❌ '+f.name+' supera els 10MB','error'); continue; }
       if (!selectedFiles.find(x => x.name===f.name && x.size===f.size)) selectedFiles.push(f);
     }
+    renderFiles();
+  }
+
+  // ---- Adjunta automàticament el fitxer escanejat com a adjunt del formulari ----
+  // S'invoca des de processarEscaneig després d'extreure les dades amb la IA.
+  // Si el fitxer pesa més de 10 MB no l'adjuntem, però sí que s'hauran extret les dades.
+  function adjuntarFitxerEscanejat(fitxer) {
+    if (!fitxer || fitxer.size > 10*1024*1024) return;
+    // Evitem duplicats si l'usuari escaneja diverses vegades el mateix fitxer
+    if (selectedFiles.find(x => x.name===fitxer.name && x.size===fitxer.size)) return;
+    selectedFiles.push(fitxer);
     renderFiles();
   }
 
@@ -1445,6 +1508,8 @@
         ['percIVACustom','percIRPFCustom'].forEach(id=>document.getElementById(id).classList.remove('visible'));
         const ivaF=document.getElementById('importIVA'); ivaF.readOnly=true; ivaF.placeholder='Calculat';
         recalcular();
+        // Restaurem malnom i IBAN guardats al navegador per comoditat
+        carregarDadesGuardades();
         window.scrollTo({top:0,behavior:'smooth'});
       } else {
         throw new Error(result.error||'Error desconegut');
@@ -1467,6 +1532,87 @@
   document.addEventListener('change', function(e) {
     if (e.target.classList && e.target.classList.contains('ia-filled')) {
       e.target.classList.remove('ia-filled');
+    }
+  });
+
+  // ====================================================================
+  // MEMÒRIA LOCAL (localStorage) per a malnom i IBAN del soci
+  // ====================================================================
+  // Les dades es guarden al navegador del soci i no surten mai del seu
+  // dispositiu. Persisteixen entre sessions fins que el soci les esborri
+  // (manualment, o netejant les dades del navegador).
+
+  const STORAGE_KEY = 'marrecs_factures_user_v1';
+
+  function carregarDadesGuardades() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return;
+      const dades = JSON.parse(raw);
+
+      // Restaurem malnom si existeix
+      const malnomEl = document.getElementById('malnom');
+      if (dades.malnom && malnomEl && !malnomEl.value) {
+        malnomEl.value = dades.malnom;
+      }
+
+      // Restaurem IBAN si existeix i pre-seleccionem "sí, l'he pagat jo"
+      const ibanEl = document.getElementById('iban');
+      if (dades.iban && ibanEl && !ibanEl.value) {
+        ibanEl.value = dades.iban;
+      }
+    } catch(err) {
+      console.warn('No s\'han pogut llegir les dades guardades:', err);
+    }
+  }
+
+  function desarDadaUsuari(camp, valor) {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      const dades = raw ? JSON.parse(raw) : {};
+      if (valor && valor.trim()) {
+        dades[camp] = valor.trim();
+      } else {
+        delete dades[camp];
+      }
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(dades));
+    } catch(err) {
+      console.warn('No s\'han pogut desar les dades:', err);
+    }
+  }
+
+  function esborrarDadesGuardades() {
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+      showToast('✅ Dades personals esborrades d\'aquest navegador.');
+      // Buidem també els camps actuals
+      const malnomEl = document.getElementById('malnom');
+      const ibanEl = document.getElementById('iban');
+      if (malnomEl) malnomEl.value = '';
+      if (ibanEl) ibanEl.value = '';
+    } catch(err) {
+      console.warn('No s\'han pogut esborrar les dades:', err);
+    }
+  }
+
+  // Inicialitzem en carregar la pàgina
+  document.addEventListener('DOMContentLoaded', function() {
+    carregarDadesGuardades();
+
+    // Listener per desar malnom quan canvia
+    const malnomEl = document.getElementById('malnom');
+    if (malnomEl) {
+      malnomEl.addEventListener('input', function() {
+        desarDadaUsuari('malnom', this.value);
+      });
+    }
+
+    // Listener per desar IBAN quan canvia
+    const ibanEl = document.getElementById('iban');
+    if (ibanEl) {
+      ibanEl.addEventListener('input', function() {
+        desarDadaUsuari('iban', this.value);
+      });
     }
   });
 </script>
