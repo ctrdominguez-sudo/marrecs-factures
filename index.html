@@ -130,6 +130,89 @@
   .spinner { display:inline-block; width:16px; height:16px; border:2px solid rgba(255,255,255,0.3); border-top-color:white; border-radius:50%; animation:spin 0.7s linear infinite; vertical-align:middle; margin-right:8px; }
   @keyframes spin { to { transform:rotate(360deg); } }
 
+
+  /* Escaner de factura */
+  .scan-section {
+    background: linear-gradient(135deg, rgba(27,108,168,0.15) 0%, rgba(27,108,168,0.05) 100%);
+    border: 2px dashed var(--blue);
+    border-radius: 8px;
+    padding: 24px;
+    margin-bottom: 20px;
+    text-align: center;
+  }
+  .scan-title {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 20px;
+    letter-spacing: 2px;
+    color: white;
+    margin-bottom: 6px;
+  }
+  .scan-desc {
+    font-size: 13px;
+    color: var(--text-dim);
+    margin-bottom: 16px;
+    line-height: 1.5;
+  }
+  .scan-buttons {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+  .btn-scan {
+    background: var(--blue);
+    color: white;
+    border: none;
+    border-radius: 4px;
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-weight: 600;
+    font-size: 13px;
+    padding: 10px 20px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: background 0.15s, transform 0.1s;
+  }
+  .btn-scan:hover { background: var(--blue-light); transform: translateY(-1px); }
+  .btn-scan.secondary {
+    background: transparent;
+    border: 1px solid var(--blue);
+    color: #7dd4fc;
+  }
+  .btn-scan.secondary:hover { background: rgba(27,108,168,0.2); }
+  .scan-preview {
+    display: none;
+    margin-top: 14px;
+    border-radius: 6px;
+    overflow: hidden;
+    max-height: 200px;
+    position: relative;
+  }
+  .scan-preview img {
+    width: 100%;
+    max-height: 200px;
+    object-fit: contain;
+    background: var(--mid);
+    border-radius: 4px;
+  }
+  .scan-preview.visible { display: block; }
+  .scan-status {
+    margin-top: 12px;
+    font-size: 13px;
+    color: var(--text-dim);
+    min-height: 20px;
+  }
+  .scan-status.loading { color: #7dd4fc; }
+  .scan-status.ok { color: var(--success); }
+  .scan-status.error { color: #f87171; }
+  .scan-spinner {
+    display: inline-block; width: 14px; height: 14px;
+    border: 2px solid rgba(91,179,232,0.3);
+    border-top-color: #7dd4fc; border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    vertical-align: middle; margin-right: 6px;
+  }
   /* Tipus de document selector */
   .tipus-selector {
     display: grid;
@@ -206,6 +289,30 @@
   </div>
 
   <form id="factura-form" novalidate>
+
+  <!-- ESCANER DE FACTURA AMB IA -->
+  <div class="scan-section">
+    <div class="scan-title">📷 Escaneja la factura amb IA</div>
+    <div class="scan-desc">Fes una foto o puja una imatge i Claude llegirà les dades automàticament.<br>Podràs revisar i corregir abans d'enviar.</div>
+    <div class="scan-buttons">
+      <button type="button" class="btn-scan" onclick="document.getElementById('scan-camera').click()">
+        📷 Obrir càmera
+      </button>
+      <button type="button" class="btn-scan secondary" onclick="document.getElementById('scan-file').click()">
+        🖼️ Pujar imatge / PDF
+      </button>
+    </div>
+    <!-- Inputs ocults -->
+    <input type="file" id="scan-camera" accept="image/*" capture="environment" style="display:none" onchange="processarEscaneig(this)">
+    <input type="file" id="scan-file" accept="image/*,.pdf" style="display:none" onchange="processarEscaneig(this)">
+    <!-- Previsualització -->
+    <div class="scan-preview" id="scan-preview">
+      <img id="scan-img" src="" alt="Previsualització">
+    </div>
+    <div class="scan-status" id="scan-status"></div>
+  </div>
+
+
 
     <!-- 0. Codi secret -->
     <div class="form-section">
@@ -468,6 +575,260 @@
     } else {
       info.classList.remove('visible');
     }
+  }
+
+
+  // ---- Escaneig de factura amb IA ----
+  async function processarEscaneig(input) {
+    if (!input.files || !input.files[0]) return;
+    const fitxer = input.files[0];
+    const status = document.getElementById('scan-status');
+    const preview = document.getElementById('scan-preview');
+    const img = document.getElementById('scan-img');
+
+    // Mostrem previsualització si és imatge
+    if (fitxer.type.startsWith('image/')) {
+      const url = URL.createObjectURL(fitxer);
+      img.src = url;
+      preview.classList.add('visible');
+    } else {
+      preview.classList.remove('visible');
+    }
+
+    status.className = 'scan-status loading';
+    status.innerHTML = '<span class="scan-spinner"></span>Analitzant la factura amb IA...';
+
+    try {
+      // Convertim a base64
+      const base64 = await new Promise((res, rej) => {
+        const r = new FileReader();
+        r.onload = () => res(r.result.split(',')[1]);
+        r.onerror = rej;
+        r.readAsDataURL(fitxer);
+      });
+
+      const esPDF = fitxer.type === 'application/pdf';
+
+      // Pas 1: Google Cloud Vision — extraiem el text de la imatge
+      const visionResp = await fetch(
+        'https://vision.googleapis.com/v1/images:annotate?key=AIzaSyB5Av2BYf5oeVqWDxGxx6PyyjgOCWiuk0g',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            requests: [{
+              image: { content: base64 },
+              features: [{ type: 'DOCUMENT_TEXT_DETECTION', maxResults: 1 }]
+            }]
+          })
+        }
+      );
+      const visionData = await visionResp.json();
+      if (visionData.error) throw new Error(visionData.error.message);
+      const textExtret = visionData.responses?.[0]?.fullTextAnnotation?.text || '';
+      if (!textExtret) throw new Error("No s'ha pogut llegir text de la imatge");
+
+      // Pas 2: Analitzem el text extret per omplir els camps
+      const dades = interpretarText(textExtret);
+
+      // Omplim el formulari amb les dades extretes
+      omplirFormulari(dades);
+
+      status.className = 'scan-status ok';
+      status.innerHTML = '✅ Dades extretes correctament! Revisa i corregeix si cal.';
+
+    } catch(err) {
+      console.error('Error escaneig:', err);
+      status.className = 'scan-status error';
+      status.innerHTML = '❌ No s'han pogut llegir les dades. Omple el formulari manualment.';
+    }
+
+    // Resetegem l'input per permetre tornar a seleccionar el mateix fitxer
+    input.value = '';
+  }
+
+
+  // ---- Interpretació del text extret per Google Vision ----
+  function interpretarText(text) {
+    const lines = text.split('\n').map(l => l.trim()).filter(l => l);
+    const tot = text.toUpperCase();
+    const dades = {
+      tipusDocument: '', dataFactura: '', numFactura: '', proveidor: '',
+      nifProveidor: '', concepte: '', importSenseIVA: '', percIVA: '21',
+      importIVA: '', importAmbIVA: '', percIRPF: '0', importIRPF: '0.00'
+    };
+
+    // Tipus de document
+    if (/FACTURA/i.test(text)) dades.tipusDocument = 'Factura';
+    else if (/TICKET|REBUT|RECIBO|RECEIPT/i.test(text)) dades.tipusDocument = 'Ticket';
+    else dades.tipusDocument = 'Ticket';
+
+    // Data — formats: DD/MM/YYYY, DD-MM-YYYY, YYYY-MM-DD
+    const dataMatch = text.match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/);
+    if (dataMatch) {
+      let [_, d, m, y] = dataMatch;
+      if (y.length === 2) y = '20' + y;
+      if (parseInt(d) > 12) { // DD/MM/YYYY
+        dades.dataFactura = `${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`;
+      } else {
+        dades.dataFactura = `${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`;
+      }
+    }
+    const dataMatch2 = text.match(/(\d{4})[\/\-](\d{2})[\/\-](\d{2})/);
+    if (dataMatch2 && !dataMatch) {
+      dades.dataFactura = dataMatch2[0];
+    }
+
+    // Número de factura
+    const numMatch = text.match(/(?:N[úu]m(?:ero)?\.?\s*(?:factura)?|Factura\s*N[°º]?|N[°º]|#)\s*:?\s*([A-Z0-9\/\-]+)/i);
+    if (numMatch) dades.numFactura = numMatch[1];
+    else {
+      // Busquem patró de número de factura comú
+      const numMatch2 = text.match(/([A-Z]{1,3}[\-\/]?\d{4,}[\-\/]?\d*)/);
+      if (numMatch2) dades.numFactura = numMatch2[1];
+    }
+
+    // NIF/CIF del proveïdor
+    const nifMatch = text.match(/([A-Z]\d{7}[A-Z0-9]|\d{8}[A-Z])/);
+    if (nifMatch) dades.nifProveidor = nifMatch[1];
+
+    // Proveïdor — normalment és la primera línia amb text
+    for (let i = 0; i < Math.min(5, lines.length); i++) {
+      const l = lines[i];
+      if (l.length > 3 && l.length < 60 && !/^\d/.test(l) && !/^[A-Z]\d{7}/.test(l)) {
+        dades.proveidor = l;
+        break;
+      }
+    }
+
+    // IVA
+    const ivaMatch = text.match(/IVA\s*(\d+)\s*%/i) || text.match(/(\d+)\s*%\s*IVA/i);
+    if (ivaMatch) dades.percIVA = ivaMatch[1];
+
+    // Imports — busquem patrons de preu
+    const preuPatron = /(\d+[.,]\d{2})/g;
+    const preus = [];
+    let m2;
+    while ((m2 = preuPatron.exec(text)) !== null) {
+      preus.push(parseFloat(m2[1].replace(',', '.')));
+    }
+
+    // Import total — busquem "total" o "import" o l'import més gran
+    const totalMatch = text.match(/(?:TOTAL|IMPORTE TOTAL|TOTAL A PAGAR)[^\d]*(\d+[.,]\d{2})/i);
+    if (totalMatch) {
+      dades.importAmbIVA = parseFloat(totalMatch[1].replace(',', '.')).toFixed(2);
+    } else if (preus.length > 0) {
+      dades.importAmbIVA = Math.max(...preus).toFixed(2);
+    }
+
+    // Base imposable (sense IVA)
+    const baseMatch = text.match(/(?:BASE|BASE IMPONIBLE|SUBTOTAL)[^\d]*(\d+[.,]\d{2})/i);
+    if (baseMatch) {
+      dades.importSenseIVA = parseFloat(baseMatch[1].replace(',', '.')).toFixed(2);
+    } else if (dades.importAmbIVA) {
+      const perc = parseInt(dades.percIVA) || 21;
+      const base = parseFloat(dades.importAmbIVA) / (1 + perc/100);
+      dades.importSenseIVA = base.toFixed(2);
+    }
+
+    // Import IVA
+    const ivaImportMatch = text.match(/(?:CUOTA IVA|QUOTA IVA|IVA)[^\d]*(\d+[.,]\d{2})/i);
+    if (ivaImportMatch) {
+      dades.importIVA = parseFloat(ivaImportMatch[1].replace(',', '.')).toFixed(2);
+    } else if (dades.importSenseIVA && dades.importAmbIVA) {
+      dades.importIVA = (parseFloat(dades.importAmbIVA) - parseFloat(dades.importSenseIVA)).toFixed(2);
+    }
+
+    // IRPF
+    const irpfMatch = text.match(/IRPF\s*(\d+)\s*%/i) || text.match(/RETENCI[ÓO]N?\s*(\d+)\s*%/i);
+    if (irpfMatch) dades.percIRPF = irpfMatch[1];
+
+    // Concepte — busquem descripció
+    const conceptePatterns = ['CONCEPTE', 'CONCEPTO', 'DESCRIPCI', 'SERVICI', 'PRODUCTE'];
+    for (const pat of conceptePatterns) {
+      const idx = tot.indexOf(pat);
+      if (idx >= 0) {
+        const segment = text.slice(idx, idx + 100);
+        const parts = segment.split('\n');
+        if (parts[1]) { dades.concepte = parts[1].trim().slice(0, 60); break; }
+      }
+    }
+    if (!dades.concepte && lines.length > 1) {
+      dades.concepte = lines[Math.min(2, lines.length-1)].slice(0, 60);
+    }
+
+    return dades;
+  }
+
+  function omplirFormulari(dades) {
+    // Tipus de document
+    if (dades.tipusDocument) {
+      const radio = document.querySelector(`input[name="tipusDocument"][value="${dades.tipusDocument}"]`);
+      if (radio) { radio.click(); }
+    }
+    // Data
+    if (dades.dataFactura) {
+      document.getElementById('dataFactura').value = dades.dataFactura;
+    }
+    // Número factura
+    if (dades.numFactura) {
+      document.getElementById('numFactura').value = dades.numFactura;
+    }
+    // Proveïdor
+    if (dades.proveidor) {
+      document.getElementById('proveidor').value = dades.proveidor;
+    }
+    // NIF
+    if (dades.nifProveidor) {
+      document.getElementById('nifProveidor').value = dades.nifProveidor;
+    }
+    // Concepte
+    if (dades.concepte) {
+      document.getElementById('concepte').value = dades.concepte;
+    }
+    // Import sense IVA
+    if (dades.importSenseIVA) {
+      document.getElementById('importSenseIVA').value = parseFloat(dades.importSenseIVA).toFixed(2);
+    }
+    // % IVA
+    if (dades.percIVA !== undefined && dades.percIVA !== '') {
+      const percIVAStr = String(dades.percIVA);
+      const selectIVA = document.getElementById('percIVA');
+      if (percIVAStr === 'varis') {
+        selectIVA.value = 'varis';
+        handleIVA('varis');
+        if (dades.importIVA) {
+          document.getElementById('importIVA').value = parseFloat(dades.importIVA).toFixed(2);
+          recalcularDesIVA();
+        }
+      } else {
+        const opts = [...selectIVA.options].map(o => o.value);
+        if (opts.includes(percIVAStr)) {
+          selectIVA.value = percIVAStr;
+        } else {
+          selectIVA.value = 'custom';
+          document.getElementById('percIVACustom').classList.add('visible');
+          document.getElementById('percIVACustom').value = percIVAStr;
+        }
+        handleIVA(selectIVA.value);
+      }
+    }
+    // % IRPF
+    if (dades.percIRPF !== undefined) {
+      const percIRPFStr = String(dades.percIRPF);
+      const selectIRPF = document.getElementById('percIRPF');
+      const opts = [...selectIRPF.options].map(o => o.value);
+      if (opts.includes(percIRPFStr)) {
+        selectIRPF.value = percIRPFStr;
+      } else if (percIRPFStr !== '0') {
+        selectIRPF.value = 'custom';
+        document.getElementById('percIRPFCustom').classList.add('visible');
+        document.getElementById('percIRPFCustom').value = percIRPFStr;
+      }
+      handleIRPF(selectIRPF.value);
+    }
+    // Recalculem
+    recalcular();
   }
 
   // ---- Qui ha pagat ----
