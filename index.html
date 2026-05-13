@@ -604,6 +604,95 @@
     flex-shrink: 0;
   }
   .footer-link:hover { color: var(--taronja); }
+
+  /* PANELL D'ERRORS DE VALIDACIÓ */
+  .error-panel {
+    display: none;
+    background: var(--error-bg);
+    border: 1.5px solid var(--error);
+    border-radius: 8px;
+    padding: 18px 22px 16px;
+    margin: 8px 0 16px;
+    box-shadow: 0 2px 12px rgba(199,62,62,0.12);
+  }
+  .error-panel.visible {
+    display: block;
+    animation: error-slide-in 0.3s ease-out;
+  }
+  @keyframes error-slide-in {
+    from { opacity: 0; transform: translateY(-6px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .error-panel-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+  .error-icon { font-size: 18px; }
+  .error-title {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 16px;
+    color: var(--error);
+    flex: 1;
+  }
+  .error-close {
+    background: none;
+    border: none;
+    color: var(--error);
+    font-size: 22px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0 4px;
+    opacity: 0.7;
+    transition: opacity 0.15s;
+  }
+  .error-close:hover { opacity: 1; }
+  .error-list {
+    list-style: none;
+    margin: 0; padding: 0;
+  }
+  .error-list li {
+    padding: 6px 0 6px 22px;
+    color: var(--text);
+    font-size: 14px;
+    line-height: 1.5;
+    position: relative;
+    border-top: 1px solid rgba(199,62,62,0.15);
+  }
+  .error-list li:first-child { border-top: none; }
+  .error-list li::before {
+    content: "•";
+    color: var(--error);
+    font-weight: 700;
+    font-size: 18px;
+    position: absolute;
+    left: 6px;
+    top: 2px;
+  }
+
+  /* Destacat visual dels camps que falten */
+  input.camp-error,
+  select.camp-error,
+  textarea.camp-error {
+    border-color: var(--error) !important;
+    background: var(--error-bg) !important;
+    box-shadow: 0 0 0 3px rgba(199,62,62,0.1) !important;
+    animation: shake 0.4s ease-out;
+  }
+  /* Per als targetes de tipus document i qui ha pagat */
+  .tipus-option.camp-error .tipus-card {
+    border-color: var(--error) !important;
+    background: var(--error-bg) !important;
+    box-shadow: 0 0 0 3px rgba(199,62,62,0.1);
+    animation: shake 0.4s ease-out;
+  }
+  @keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    25% { transform: translateX(-3px); }
+    75% { transform: translateX(3px); }
+  }
 </style>
 </head>
 <body>
@@ -894,6 +983,16 @@
           <textarea id="comentaris" rows="4" placeholder="Qualsevol informació addicional que vulguis afegir..."></textarea>
         </div>
       </div>
+    </div>
+
+    <!-- Panell d'errors de validació -->
+    <div class="error-panel" id="error-panel" role="alert" aria-live="polite">
+      <div class="error-panel-header">
+        <span class="error-icon">⚠️</span>
+        <span class="error-title" id="error-title">Falten camps per omplir</span>
+        <button type="button" class="error-close" onclick="amagarPanellErrors()" aria-label="Tancar">×</button>
+      </div>
+      <ul class="error-list" id="error-list"></ul>
     </div>
 
     <div class="submit-area">
@@ -1366,12 +1465,89 @@
   }
 
   // ---- Submit ----
+  // ====================================================================
+  // PANELL D'ERRORS — mostra una llista clara dels camps que falten
+  // ====================================================================
+  function mostrarPanellErrors(errors, primerCampId) {
+    const panell = document.getElementById('error-panel');
+    const llista = document.getElementById('error-list');
+    const titol = document.getElementById('error-title');
+
+    // Construïm la llista
+    llista.innerHTML = errors.map(e =>
+      `<li>${escapeHtml(e)}</li>`
+    ).join('');
+
+    // Títol depenent de quants n'hi ha
+    if (errors.length === 1) {
+      titol.textContent = 'Falta 1 camp per omplir';
+    } else {
+      titol.textContent = `Falten ${errors.length} camps per omplir`;
+    }
+
+    panell.classList.add('visible');
+
+    // Fem scroll al primer camp que falla
+    if (primerCampId) {
+      setTimeout(() => {
+        const el = document.getElementById(primerCampId);
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          // Si és un input, hi fem focus després de l'scroll
+          if (el.tagName === 'INPUT' || el.tagName === 'SELECT' || el.tagName === 'TEXTAREA') {
+            setTimeout(() => el.focus({ preventScroll: true }), 400);
+          }
+        }
+      }, 100);
+    }
+  }
+
+  function amagarPanellErrors() {
+    document.getElementById('error-panel').classList.remove('visible');
+  }
+
+  // Quan l'usuari toca un camp marcat com a error, li traiem el destacat vermell
+  document.addEventListener('input', function(e) {
+    if (e.target.classList && e.target.classList.contains('camp-error')) {
+      e.target.classList.remove('camp-error');
+      comprovarSiPodemAmagarErrors();
+    }
+  });
+  document.addEventListener('change', function(e) {
+    if (e.target.classList && e.target.classList.contains('camp-error')) {
+      e.target.classList.remove('camp-error');
+      comprovarSiPodemAmagarErrors();
+    }
+    // Cas especial: els radios de tipus document i qui ha pagat
+    if (e.target.name === 'tipusDocument') {
+      document.getElementById('opt-factura').classList.remove('camp-error');
+      document.getElementById('opt-ticket').classList.remove('camp-error');
+      comprovarSiPodemAmagarErrors();
+    }
+    if (e.target.name === 'haPagat') {
+      document.getElementById('opt-pagat-si').classList.remove('camp-error');
+      document.getElementById('opt-pagat-no').classList.remove('camp-error');
+      comprovarSiPodemAmagarErrors();
+    }
+  });
+
+  // Si ja no queda cap camp amb classe .camp-error, amaguem el panell
+  function comprovarSiPodemAmagarErrors() {
+    if (document.querySelectorAll('.camp-error').length === 0) {
+      amagarPanellErrors();
+    }
+  }
+
   document.getElementById('factura-form').addEventListener('submit', async function(e) {
     e.preventDefault();
 
     // Definim btn i progWrap al principi perquè estiguin disponibles en totes les validacions
     const btn      = document.getElementById('btn-submit');
     const progWrap = document.getElementById('progress-wrap');
+
+    // Netegem panell d'errors anterior i destacats vermells
+    amagarPanellErrors();
+    document.querySelectorAll('.camp-error').forEach(el => el.classList.remove('camp-error'));
 
     // Validació codi secret (al client, ofuscat)
     const codiIntroduït = document.getElementById('codiSecret').value.trim();
@@ -1380,46 +1556,73 @@
     // Hash SHA-256 de "3d9fal2026"
     const codiVàlid = 'a59463167151c4ddc505c64c3ed048c9407c04e8a8dacfd5aad411a9104bb32f';
     if (codiHex !== codiVàlid) {
-      showToast('❌ Codi incorrecte. Contacta amb el tresorer.', 'error');
+      mostrarPanellErrors(['Codi d\'accés incorrecte. Contacta amb el tresorer.'], 'codiSecret');
       return;
     }
 
-    // Validació tipus document
+    // ---- Recopilem TOTS els errors abans de retornar ----
+    const errors = [];
+    let primerCampError = null;  // ID del primer camp que falla (per fer scroll)
+
+    // Tipus de document
     const tipusDoc = document.querySelector('input[name="tipusDocument"]:checked');
     if (!tipusDoc) {
-      showToast('⚠️ Selecciona si és una factura o un ticket', 'error');
-      return;
+      errors.push('Tipus de document (Factura o Ticket)');
+      document.getElementById('opt-factura').classList.add('camp-error');
+      document.getElementById('opt-ticket').classList.add('camp-error');
+      if (!primerCampError) primerCampError = 'opt-factura';
     }
 
-    // Validació camps obligatoris
-    // Validació qui ha pagat
+    // Qui ha pagat
     const haPagat = document.querySelector('input[name="haPagat"]:checked');
     if (!haPagat) {
-      showToast('⚠️ Indica si has pagat la factura tu o la pagarà la colla', 'error');
-      return;
-    }
-    // Validació IBAN (només si ha pagat el soci)
-    if (haPagat.value === 'si') {
-      const ibanVal = document.getElementById('iban').value.trim();
-      if (!ibanVal) {
-        document.getElementById('iban').style.borderColor = '#ef4444';
-        showToast('⚠️ Introdueix el teu IBAN per rebre el reemborsament', 'error');
-        return;
-      }
-      document.getElementById('iban').style.borderColor = '';
+      errors.push('Indica si has pagat tu la factura o la pagarà la colla');
+      document.getElementById('opt-pagat-si').classList.add('camp-error');
+      document.getElementById('opt-pagat-no').classList.add('camp-error');
+      if (!primerCampError) primerCampError = 'opt-pagat-si';
     }
 
-    const req = ['malnom','dataFactura','numFactura','concepte','proveidor','nifProveidor','importSenseIVA'];
-    let valid = true;
-    req.forEach(id => {
-      const el = document.getElementById(id);
-      if (!el.value.trim()) { el.style.borderColor='#ef4444'; valid=false; }
-      else el.style.borderColor='';
-    });
-    if (!document.getElementById('categoria').value) {
-      document.getElementById('categoria').style.borderColor='#ef4444'; valid=false;
+    // IBAN — només si ha pagat el soci
+    if (haPagat && haPagat.value === 'si') {
+      const ibanEl = document.getElementById('iban');
+      if (!ibanEl.value.trim()) {
+        errors.push('IBAN per rebre el reemborsament');
+        ibanEl.classList.add('camp-error');
+        if (!primerCampError) primerCampError = 'iban';
+      }
     }
-    if (!valid) { showToast('⚠️ Omple tots els camps obligatoris','error'); return; }
+
+    // Camps de text obligatoris
+    const campsObligatoris = [
+      { id: 'malnom',         label: 'Malnom del soci' },
+      { id: 'dataFactura',    label: 'Data del document' },
+      { id: 'numFactura',     label: 'Número de factura/ticket' },
+      { id: 'concepte',       label: 'Concepte de la factura' },
+      { id: 'proveidor',      label: 'Nom del proveïdor' },
+      { id: 'nifProveidor',   label: 'NIF/CIF del proveïdor' },
+      { id: 'importSenseIVA', label: 'Import sense IVA' }
+    ];
+    campsObligatoris.forEach(camp => {
+      const el = document.getElementById(camp.id);
+      if (!el.value.trim()) {
+        errors.push(camp.label);
+        el.classList.add('camp-error');
+        if (!primerCampError) primerCampError = camp.id;
+      }
+    });
+
+    // Categoria
+    if (!document.getElementById('categoria').value) {
+      errors.push('Categoria de la despesa');
+      document.getElementById('categoria').classList.add('camp-error');
+      if (!primerCampError) primerCampError = 'categoria';
+    }
+
+    // Si hi ha errors, mostrem el panell i parem
+    if (errors.length > 0) {
+      mostrarPanellErrors(errors, primerCampError);
+      return;
+    }
 
     // A partir d'aquí tot és vàlid — activem el mode "enviant"
     btn.disabled   = true;
