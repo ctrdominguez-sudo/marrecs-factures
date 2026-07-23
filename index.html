@@ -451,6 +451,50 @@
     padding: 26px;
     margin-bottom: 22px;
     text-align: center;
+    position: relative;
+    transition: border-color 0.2s, background 0.2s, box-shadow 0.2s;
+  }
+  /* Estat mentre s'arrossega un fitxer per sobre */
+  .scan-section.drag-over {
+    border-color: var(--taronja);
+    border-style: solid;
+    background: linear-gradient(135deg, rgba(232,119,34,0.10) 0%, rgba(27,94,140,0.10) 100%);
+    box-shadow: 0 0 0 4px rgba(232,119,34,0.15);
+  }
+  /* Capa que tapa la secció i mostra el missatge "Deixa anar el fitxer" */
+  .scan-dropzone {
+    display: none;
+    position: absolute;
+    inset: 0;
+    border-radius: 8px;
+    background: rgba(247,244,238,0.94);
+    backdrop-filter: blur(2px);
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    pointer-events: none;
+    z-index: 5;
+  }
+  .scan-section.drag-over .scan-dropzone { display: flex; animation: slide-in 0.15s ease-out; }
+  .scan-dropzone-icon { font-size: 34px; }
+  .scan-dropzone-text {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 18px;
+    color: var(--taronja);
+    letter-spacing: -0.2px;
+  }
+  .scan-dropzone-sub { font-size: 12.5px; color: var(--text-dim); font-weight: 500; }
+  .scan-hint {
+    margin-top: 14px;
+    font-size: 12.5px;
+    color: var(--text-faint);
+    font-weight: 500;
+  }
+  .scan-hint strong { color: var(--blau-ter); font-weight: 700; }
+  @media (hover: none) and (pointer: coarse) {
+    .scan-hint { display: none; }
   }
   .scan-title {
     font-family: var(--font-display);
@@ -735,9 +779,15 @@
   <form id="factura-form" novalidate>
 
   <!-- ESCANER DE FACTURA AMB IA -->
-  <div class="scan-section">
+  <div class="scan-section" id="scan-section">
+    <!-- Capa visual que apareix quan s'arrossega un fitxer per sobre -->
+    <div class="scan-dropzone" id="scan-dropzone">
+      <div class="scan-dropzone-icon">⬇️</div>
+      <div class="scan-dropzone-text">Deixa anar el fitxer aquí</div>
+      <div class="scan-dropzone-sub">Imatge o PDF · màxim 10 MB</div>
+    </div>
     <div class="scan-title">Escaneja la factura amb IA</div>
-    <div class="scan-desc">Fes una foto o puja una imatge/PDF i la IA llegirà les dades automàticament.<br>Podràs revisar i corregir abans d'enviar.</div>
+    <div class="scan-desc">Fes una foto, puja una imatge/PDF o <strong>arrossega el fitxer aquí</strong> i la IA llegirà les dades automàticament.<br>Podràs revisar i corregir abans d'enviar.</div>
     <div class="scan-buttons">
       <button type="button" class="btn-scan" onclick="document.getElementById('scan-camera').click()">
         📷 Obrir càmera
@@ -754,6 +804,7 @@
       <img id="scan-img" src="" alt="Previsualització">
     </div>
     <div class="scan-status" id="scan-status"></div>
+    <div class="scan-hint">També pots <strong>arrossegar i deixar anar</strong> el fitxer sobre aquest requadre, o enganxar-lo amb <strong>Ctrl+V</strong>.</div>
   </div>
 
   <!-- RESUM DE LA IA -->
@@ -1048,15 +1099,44 @@
 
 
   // ---- Escaneig de factura amb Claude (IA) ----
+  // Punt d'entrada des dels inputs de fitxer (cambra / pujar fitxer)
   async function processarEscaneig(input) {
     if (!input.files || !input.files[0]) return;
     const fitxer = input.files[0];
+    // Resetegem l'input abans de processar, per poder tornar a triar el mateix fitxer
+    input.value = '';
+    await escanejarFitxer(fitxer);
+  }
+
+  // Comprova si el fitxer es pot escanejar (imatge o PDF)
+  function tipusEscanejableOK(fitxer) {
+    if (!fitxer) return false;
+    if (fitxer.type && (fitxer.type.startsWith('image/') || fitxer.type === 'application/pdf')) return true;
+    // Alguns navegadors no informen del MIME: mirem l'extensio
+    const ext = (fitxer.name || '').split('.').pop().toLowerCase();
+    return ['jpg','jpeg','png','webp','gif','pdf'].includes(ext);
+  }
+
+  // Nucli de l'escaneig — funciona tant si el fitxer ve d'un input,
+  // com si s'ha arrossegat (drag & drop) o enganxat (Ctrl+V)
+  let escanejantAra = false;
+
+  async function escanejarFitxer(fitxer) {
+    if (!fitxer) return;
     const status = document.getElementById('scan-status');
     const preview = document.getElementById('scan-preview');
     const img = document.getElementById('scan-img');
 
+    // Validació de format
+    if (!tipusEscanejableOK(fitxer)) {
+      status.className = 'scan-status error';
+      status.innerHTML = "❌ Format no suportat (" + (fitxer.name || 'fitxer') + "). Fes servir una imatge (JPG, PNG, WEBP) o un PDF.";
+      document.getElementById('scan-preview').classList.remove('visible');
+      return;
+    }
+
     // Mostrem previsualització si és imatge
-    if (fitxer.type.startsWith('image/')) {
+    if (fitxer.type && fitxer.type.startsWith('image/')) {
       const url = URL.createObjectURL(fitxer);
       img.src = url;
       preview.classList.add('visible');
@@ -1068,10 +1148,10 @@
     if (fitxer.size > 10 * 1024 * 1024) {
       status.className = 'scan-status error';
       status.innerHTML = "❌ El fitxer supera els 10 MB. Fes una foto més comprimida o omple el formulari manualment.";
-      input.value = '';
       return;
     }
 
+    escanejantAra = true;
     status.className = 'scan-status loading';
     status.innerHTML = '<span class="scan-spinner"></span>Analitzant la factura amb IA... (pot trigar uns segons)';
 
@@ -1119,11 +1199,93 @@
       console.error('Error escaneig:', err);
       status.className = 'scan-status error';
       status.innerHTML = "❌ No s'han pogut llegir les dades: " + err.message + ". Omple el formulari manualment.";
+    } finally {
+      escanejantAra = false;
+    }
+  }
+
+
+  // ====================================================================
+  // DRAG & DROP i ENGANXAR (Ctrl+V) sobre la secció d'escaneig
+  // ====================================================================
+  (function inicialitzarDragDropEscaneig() {
+    const zona = document.getElementById('scan-section');
+    if (!zona) return;
+
+    let comptadorDrag = 0;   // per gestionar dragenter/dragleave dels fills
+
+    function dragPortaFitxers(e) {
+      if (!e.dataTransfer) return false;
+      const tipus = e.dataTransfer.types;
+      if (!tipus) return false;
+      return Array.prototype.indexOf.call(tipus, 'Files') !== -1;
     }
 
-    // Resetegem l'input per permetre tornar a seleccionar el mateix fitxer
-    input.value = '';
-  }
+    zona.addEventListener('dragenter', function(e) {
+      if (!dragPortaFitxers(e)) return;
+      e.preventDefault();
+      comptadorDrag++;
+      zona.classList.add('drag-over');
+    });
+
+    zona.addEventListener('dragover', function(e) {
+      if (!dragPortaFitxers(e)) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'copy';
+      zona.classList.add('drag-over');
+    });
+
+    zona.addEventListener('dragleave', function(e) {
+      comptadorDrag--;
+      if (comptadorDrag <= 0) {
+        comptadorDrag = 0;
+        zona.classList.remove('drag-over');
+      }
+    });
+
+    zona.addEventListener('drop', async function(e) {
+      if (!dragPortaFitxers(e)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      comptadorDrag = 0;
+      zona.classList.remove('drag-over');
+
+      if (escanejantAra) {
+        showToast('⏳ Espera que acabi l\'escaneig anterior.', 'error');
+        return;
+      }
+
+      const fitxers = e.dataTransfer.files;
+      if (!fitxers || !fitxers.length) return;
+
+      if (fitxers.length > 1) {
+        showToast('ℹ️ S\'escanejarà només el primer fitxer: ' + fitxers[0].name);
+      }
+      await escanejarFitxer(fitxers[0]);
+    });
+
+    // Enganxar una captura o un fitxer amb Ctrl+V / Cmd+V
+    document.addEventListener('paste', async function(e) {
+      if (!e.clipboardData || !e.clipboardData.files || !e.clipboardData.files.length) return;
+      // No interceptem si l'usuari està enganxant text dins d'un camp del formulari
+      const actiu = document.activeElement;
+      if (actiu && ['INPUT','TEXTAREA','SELECT'].includes(actiu.tagName)) return;
+      if (escanejantAra) return;
+      const fitxer = e.clipboardData.files[0];
+      if (!tipusEscanejableOK(fitxer)) return;
+      e.preventDefault();
+      zona.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      await escanejarFitxer(fitxer);
+    });
+  })();
+
+  // Evitem que el navegador obri el fitxer si l'usuari el deixa anar fora de les zones vàlides
+  ['dragover', 'drop'].forEach(function(ev) {
+    window.addEventListener(ev, function(e) {
+      const dinsZona = e.target.closest && e.target.closest('#scan-section, #drop-area');
+      if (!dinsZona) e.preventDefault();
+    });
+  });
 
 
   // ---- Camps escanejats per la IA: ordre i etiquetes per al resum ----
