@@ -296,6 +296,46 @@
     color: var(--blau-ter-dark);
     font-weight: 600;
     font-variant-numeric: tabular-nums;
+    cursor: text;
+  }
+  /* Import editat a mà (no calculat automàticament) */
+  input.computed.manual {
+    background: #FFF6E5;
+    border-color: #E0A030;
+  }
+  .avis-manual {
+    display: none;
+    margin-top: 10px;
+    padding: 8px 12px;
+    border-radius: 8px;
+    background: #FFF6E5;
+    border: 1px solid #F0D29A;
+    font-size: 0.85rem;
+    color: #7A5410;
+  }
+  .avis-manual.visible { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+  .avis-manual button {
+    border: 1px solid #E0A030; background: #fff; color: #7A5410;
+    border-radius: 6px; padding: 4px 10px; font-size: 0.82rem; cursor: pointer; font-weight: 600;
+  }
+  /* Selecció de diversos fitxers a l'escàner */
+  .scan-multi, .scan-cua {
+    display: none;
+    margin-top: 14px;
+    padding: 12px 14px;
+    border-radius: 10px;
+    background: var(--surface);
+    border: 1px solid var(--border-strong);
+    font-size: 0.9rem;
+  }
+  .scan-multi.visible, .scan-cua.visible { display: block; }
+  .scan-multi-files { margin: 6px 0 10px; color: var(--text-dim); font-size: 0.82rem; word-break: break-word; }
+  .scan-multi .scan-buttons { margin-top: 0; }
+  .scan-cua { display: none; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+  .scan-cua.visible { display: flex; }
+  .scan-cua button {
+    border: 1px solid var(--border-strong); background: var(--surface-alt);
+    border-radius: 6px; padding: 5px 10px; font-size: 0.82rem; cursor: pointer;
   }
 
   .extra-input { display:none; margin-top:8px; }
@@ -783,28 +823,45 @@
     <!-- Capa visual que apareix quan s'arrossega un fitxer per sobre -->
     <div class="scan-dropzone" id="scan-dropzone">
       <div class="scan-dropzone-icon">⬇️</div>
-      <div class="scan-dropzone-text">Deixa anar el fitxer aquí</div>
-      <div class="scan-dropzone-sub">Imatge o PDF · màxim 10 MB</div>
+      <div class="scan-dropzone-text">Deixa anar els fitxers aquí</div>
+      <div class="scan-dropzone-sub">Imatges o PDF · màxim 10 MB per fitxer</div>
     </div>
     <div class="scan-title">Escaneja la factura amb IA</div>
-    <div class="scan-desc">Fes una foto, puja una imatge/PDF o <strong>arrossega el fitxer aquí</strong> i la IA llegirà les dades automàticament.<br>Podràs revisar i corregir abans d'enviar.</div>
+    <div class="scan-desc">Fes una foto, puja una o diverses imatges/PDF o <strong>arrossega els fitxers aquí</strong> i la IA llegirà les dades automàticament.<br>Podràs revisar i corregir qualsevol valor abans d'enviar.</div>
     <div class="scan-buttons">
       <button type="button" class="btn-scan" onclick="document.getElementById('scan-camera').click()">
         📷 Obrir càmera
       </button>
       <button type="button" class="btn-scan secondary" onclick="document.getElementById('scan-file').click()">
-        🖼️ Pujar imatge / PDF
+        🖼️ Pujar imatges / PDF
       </button>
     </div>
     <!-- Inputs ocults -->
     <input type="file" id="scan-camera" accept="image/*" capture="environment" style="display:none" onchange="processarEscaneig(this)">
-    <input type="file" id="scan-file" accept="image/*,.pdf" style="display:none" onchange="processarEscaneig(this)">
+    <input type="file" id="scan-file" accept="image/*,.pdf" multiple style="display:none" onchange="processarEscaneig(this)">
     <!-- Previsualització -->
     <div class="scan-preview" id="scan-preview">
       <img id="scan-img" src="" alt="Previsualització">
     </div>
+    <!-- Pregunta quan es pugen diversos fitxers alhora -->
+    <div class="scan-multi" id="scan-multi">
+      <strong id="scan-multi-title">Has pujat diversos fitxers. Què són?</strong>
+      <div class="scan-multi-files" id="scan-multi-files"></div>
+      <div class="scan-buttons">
+        <button type="button" class="btn-scan" onclick="triarMultiFitxers('mateixa')">📄 Pàgines d'una mateixa factura</button>
+        <button type="button" class="btn-scan secondary" onclick="triarMultiFitxers('diferents')">📚 Factures diferents (una per una)</button>
+      </div>
+    </div>
+    <!-- Cua de factures pendents -->
+    <div class="scan-cua" id="scan-cua">
+      <span id="scan-cua-text"></span>
+      <span>
+        <button type="button" onclick="saltarFacturaCua()">Saltar aquesta ›</button>
+        <button type="button" onclick="cancellarCua()">Cancel·lar cua</button>
+      </span>
+    </div>
     <div class="scan-status" id="scan-status"></div>
-    <div class="scan-hint">També pots <strong>arrossegar i deixar anar</strong> el fitxer sobre aquest requadre, o enganxar-lo amb <strong>Ctrl+V</strong>.</div>
+    <div class="scan-hint">També pots <strong>arrossegar i deixar anar</strong> un o diversos fitxers sobre aquest requadre, o enganxar-lo amb <strong>Ctrl+V</strong>.</div>
   </div>
 
   <!-- RESUM DE LA IA -->
@@ -974,11 +1031,11 @@
         <div class="field-grid three">
           <div class="field">
             <label for="importSenseIVA">Import sense IVA (€) <span class="req">*</span></label>
-            <input type="number" id="importSenseIVA" placeholder="0.00" step="0.01" min="0" required oninput="recalcular()">
+            <input type="number" id="importSenseIVA" placeholder="0.00" step="0.01" min="0" required oninput="canviBaseOPerc()">
           </div>
           <div class="field">
             <label for="percIVA">% IVA</label>
-            <select id="percIVA" onchange="handleIVA(this.value)">
+            <select id="percIVA" onchange="netejarManuals(); handleIVA(this.value)">
               <option value="0">0%</option>
               <option value="4">4%</option>
               <option value="10">10%</option>
@@ -986,42 +1043,46 @@
               <option value="varis">Varis (diversos articles)</option>
               <option value="custom">Altre % personalitzat</option>
             </select>
-            <input type="number" id="percIVACustom" class="extra-input" placeholder="Introdueix el % d'IVA" step="0.01" min="0" max="100" oninput="recalcular()">
+            <input type="number" id="percIVACustom" class="extra-input" placeholder="Introdueix el % d'IVA" step="0.01" min="0" max="100" oninput="canviBaseOPerc()">
             <div class="varis-info" id="varis-iva-info">
               ℹ️ Seleccionat <strong>Varis</strong>: introdueix l'import total d'IVA al camp de la dreta.
             </div>
           </div>
           <div class="field">
             <label for="importIVA">Import IVA (€)</label>
-            <input type="number" id="importIVA" class="computed" placeholder="Calculat" step="0.01" readonly>
+            <input type="number" id="importIVA" class="computed" placeholder="Calculat" step="0.01" title="Calculat automàticament, però el pots modificar">
           </div>
         </div>
         <div class="field-grid three" style="margin-top:14px;">
           <div class="field">
             <label for="importAmbIVA">Import amb IVA (€)</label>
-            <input type="text" id="importAmbIVA" class="computed" readonly placeholder="Calculat">
+            <input type="number" id="importAmbIVA" class="computed" step="0.01" placeholder="Calculat" title="Calculat automàticament, però el pots modificar">
           </div>
           <div class="field">
             <label for="percIRPF">% IRPF retenció</label>
-            <select id="percIRPF" onchange="handleIRPF(this.value)">
+            <select id="percIRPF" onchange="netejarManuals(); handleIRPF(this.value)">
               <option value="0" selected>0%</option>
               <option value="7">7%</option>
               <option value="15">15%</option>
               <option value="19">19%</option>
               <option value="custom">Altre % personalitzat</option>
             </select>
-            <input type="number" id="percIRPFCustom" class="extra-input" placeholder="Introdueix el % d'IRPF" step="0.01" min="0" max="100" oninput="recalcular()">
+            <input type="number" id="percIRPFCustom" class="extra-input" placeholder="Introdueix el % d'IRPF" step="0.01" min="0" max="100" oninput="canviBaseOPerc()">
           </div>
           <div class="field">
             <label for="importIRPF">Import IRPF retenció (€)</label>
-            <input type="text" id="importIRPF" class="computed" readonly placeholder="Calculat">
+            <input type="number" id="importIRPF" class="computed" step="0.01" placeholder="Calculat" title="Calculat automàticament, però el pots modificar">
           </div>
         </div>
         <div class="field-grid full total-row" style="margin-top:14px;">
           <div class="field">
             <label for="importTotal">Import total a pagar (€)</label>
-            <input type="text" id="importTotal" class="computed" readonly placeholder="Calculat automàticament">
+            <input type="number" id="importTotal" class="computed" step="0.01" placeholder="Calculat automàticament" title="Calculat automàticament, però el pots modificar">
           </div>
+        </div>
+        <div class="avis-manual" id="avis-manual">
+          <span>✏️ Has modificat algun import a mà. S'enviarà tal com està.</span>
+          <button type="button" onclick="tornarACalcular()">↺ Tornar a calcular automàticament</button>
         </div>
       </div>
     </div>
@@ -1099,13 +1160,13 @@
 
 
   // ---- Escaneig de factura amb Claude (IA) ----
-  // Punt d'entrada des dels inputs de fitxer (cambra / pujar fitxer)
+  // Punt d'entrada des dels inputs de fitxer (càmera / pujar fitxers)
   async function processarEscaneig(input) {
-    if (!input.files || !input.files[0]) return;
-    const fitxer = input.files[0];
-    // Resetegem l'input abans de processar, per poder tornar a triar el mateix fitxer
+    if (!input.files || !input.files.length) return;
+    const fitxers = Array.from(input.files);
+    // Resetegem l'input abans de processar, per poder tornar a triar els mateixos fitxers
     input.value = '';
-    await escanejarFitxer(fitxer);
+    await gestionarFitxersEscaneig(fitxers);
   }
 
   // Comprova si el fitxer es pot escanejar (imatge o PDF)
@@ -1117,64 +1178,129 @@
     return ['jpg','jpeg','png','webp','gif','pdf'].includes(ext);
   }
 
-  // Nucli de l'escaneig — funciona tant si el fitxer ve d'un input,
-  // com si s'ha arrossegat (drag & drop) o enganxat (Ctrl+V)
   let escanejantAra = false;
+  let fitxersPendentsTriar = [];   // fitxers pujats a l'espera que l'usuari digui què són
+  let cuaFactures = [];            // factures diferents pendents d'escanejar (una per una)
+  let cuaIndex = 0;
 
-  async function escanejarFitxer(fitxer) {
-    if (!fitxer) return;
+  // Rep un o diversos fitxers (input, drag & drop o Ctrl+V) i decideix què fer
+  async function gestionarFitxersEscaneig(fitxers) {
+    if (escanejantAra) { showToast('⏳ Espera que acabi l\'escaneig anterior.', 'error'); return; }
+    const valids = [];
+    fitxers.forEach(f => {
+      if (!tipusEscanejableOK(f)) showToast('❌ Format no suportat: ' + (f.name || 'fitxer'), 'error');
+      else if (f.size > 10 * 1024 * 1024) showToast('❌ ' + f.name + ' supera els 10 MB', 'error');
+      else valids.push(f);
+    });
+    if (!valids.length) return;
+
+    // Una nova pujada substitueix qualsevol cua anterior
+    cancellarCua(true);
+    document.getElementById('scan-multi').classList.remove('visible');
+
+    if (valids.length === 1) {
+      await escanejarFitxers(valids);
+      return;
+    }
+    // Diversos fitxers: preguntem si són la mateixa factura o factures diferents
+    fitxersPendentsTriar = valids;
+    document.getElementById('scan-multi-title').textContent = 'Has pujat ' + valids.length + ' fitxers. Què són?';
+    document.getElementById('scan-multi-files').textContent = valids.map(f => f.name).join(' · ');
+    document.getElementById('scan-multi').classList.add('visible');
+  }
+
+  async function triarMultiFitxers(opcio) {
+    const fitxers = fitxersPendentsTriar;
+    fitxersPendentsTriar = [];
+    document.getElementById('scan-multi').classList.remove('visible');
+    if (!fitxers.length) return;
+    if (opcio === 'mateixa') {
+      await escanejarFitxers(fitxers);
+    } else {
+      // Partim d'un formulari net (conservant les dades del soci)
+      reiniciarFormulari(true);
+      cuaFactures = fitxers;
+      cuaIndex = 0;
+      await escanejarFacturaCua();
+    }
+  }
+
+  // ---- Cua de factures diferents ----
+  function actualitzarBannerCua() {
+    const banner = document.getElementById('scan-cua');
+    if (!cuaFactures.length) { banner.classList.remove('visible'); return; }
+    document.getElementById('scan-cua-text').innerHTML =
+      '📚 <strong>Factura ' + (cuaIndex + 1) + ' de ' + cuaFactures.length + '</strong> · ' +
+      escapeHtml(cuaFactures[cuaIndex].name) +
+      (cuaIndex + 1 < cuaFactures.length ? ' — en enviar-la es carregarà la següent' : ' — és l\'última');
+    banner.classList.add('visible');
+  }
+
+  async function escanejarFacturaCua() {
+    if (cuaIndex >= cuaFactures.length) { cancellarCua(true); return; }
+    actualitzarBannerCua();
+    await escanejarFitxers([cuaFactures[cuaIndex]]);
+  }
+
+  async function passarSeguentCua() {
+    cuaIndex++;
+    if (cuaIndex >= cuaFactures.length) {
+      showToast('✅ Has acabat totes les factures de la cua.');
+      cancellarCua(true);
+      return;
+    }
+    document.getElementById('scan-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    await escanejarFacturaCua();
+  }
+
+  async function saltarFacturaCua() {
+    if (escanejantAra) return;
+    reiniciarFormulari(true);
+    await passarSeguentCua();
+  }
+
+  function cancellarCua(silenciós) {
+    const n = cuaFactures.length - cuaIndex - 1;
+    cuaFactures = []; cuaIndex = 0;
+    document.getElementById('scan-cua').classList.remove('visible');
+    if (!silenciós && n > 0) showToast('Cua cancel·lada (' + n + ' pendents descartades).');
+  }
+
+  // Nucli de l'escaneig. Tots els fitxers que rep es tracten com UNA sola factura
+  // (p. ex. diverses pàgines o fotos del mateix tiquet).
+  async function escanejarFitxers(fitxers) {
+    if (!fitxers || !fitxers.length) return;
     const status = document.getElementById('scan-status');
     const preview = document.getElementById('scan-preview');
     const img = document.getElementById('scan-img');
 
-    // Validació de format
-    if (!tipusEscanejableOK(fitxer)) {
-      status.className = 'scan-status error';
-      status.innerHTML = "❌ Format no suportat (" + (fitxer.name || 'fitxer') + "). Fes servir una imatge (JPG, PNG, WEBP) o un PDF.";
-      document.getElementById('scan-preview').classList.remove('visible');
-      return;
-    }
-
-    // Mostrem previsualització si és imatge
-    if (fitxer.type && fitxer.type.startsWith('image/')) {
-      const url = URL.createObjectURL(fitxer);
-      img.src = url;
+    // Previsualització de la primera imatge
+    const primeraImatge = fitxers.find(f => f.type && f.type.startsWith('image/'));
+    if (primeraImatge) {
+      img.src = URL.createObjectURL(primeraImatge);
       preview.classList.add('visible');
     } else {
       preview.classList.remove('visible');
     }
 
-    // Validació de mida (límit raonable per a Claude API)
-    if (fitxer.size > 10 * 1024 * 1024) {
-      status.className = 'scan-status error';
-      status.innerHTML = "❌ El fitxer supera els 10 MB. Fes una foto més comprimida o omple el formulari manualment.";
-      return;
-    }
-
     escanejantAra = true;
     status.className = 'scan-status loading';
-    status.innerHTML = '<span class="scan-spinner"></span>Analitzant la factura amb IA... (pot trigar uns segons)';
+    status.innerHTML = '<span class="scan-spinner"></span>Analitzant ' +
+      (fitxers.length > 1 ? fitxers.length + ' fitxers de la factura' : 'la factura') +
+      ' amb IA... (pot trigar uns segons)';
 
     try {
-      // Convertim a base64
-      const base64 = await new Promise((res, rej) => {
-        const r = new FileReader();
-        r.onload = () => res(r.result.split(',')[1]);
-        r.onerror = rej;
-        r.readAsDataURL(fitxer);
-      });
+      const fitxersB64 = await Promise.all(fitxers.map(fileToBase64));
 
-      // Crida a l'Apps Script amb action=extract
-      // L'Apps Script crida Claude API i ens torna el JSON ja estructurat
+      // Crida a l'Apps Script amb action=extract.
+      // "fitxers" porta totes les pàgines; "fitxer" es manté per compatibilitat
+      // amb versions antigues de l'Apps Script que només en llegeixen un.
       const resp = await fetch(APPS_SCRIPT_URL, {
         method: 'POST',
         body: JSON.stringify({
           action: 'extract',
-          fitxer: {
-            name: fitxer.name,
-            type: fitxer.type,
-            data: base64
-          }
+          fitxer: fitxersB64[0],
+          fitxers: fitxersB64
         })
       });
 
@@ -1185,20 +1311,21 @@
       const dades = result.dades;
       if (!dades) throw new Error("Claude no ha retornat dades");
 
-      // Omplim el formulari amb les dades extretes
       omplirFormulari(dades);
 
-      // Adjuntem automàticament el fitxer escanejat com a adjunt del formulari
-      // (perquè no calgui pujar-lo dues vegades)
-      adjuntarFitxerEscanejat(fitxer);
+      // Adjuntem automàticament els fitxers escanejats (perquè no calgui pujar-los dues vegades)
+      fitxers.forEach(adjuntarFitxerEscanejat);
 
       status.className = 'scan-status ok';
-      status.innerHTML = '✅ Dades extretes i fitxer adjuntat correctament! Revisa i corregeix si cal.';
+      status.innerHTML = '✅ Dades extretes i ' + (fitxers.length > 1 ? fitxers.length + ' fitxers adjuntats' : 'fitxer adjuntat') +
+        '! Revisa-les: <strong>pots modificar qualsevol camp</strong>, també els imports.';
 
     } catch(err) {
       console.error('Error escaneig:', err);
       status.className = 'scan-status error';
-      status.innerHTML = "❌ No s'han pogut llegir les dades: " + err.message + ". Omple el formulari manualment.";
+      status.innerHTML = "❌ No s'han pogut llegir les dades: " + escapeHtml(err.message) + ". Omple el formulari manualment.";
+      // Encara que falli la lectura, adjuntem els fitxers per no haver de tornar-los a pujar
+      fitxers.forEach(adjuntarFitxerEscanejat);
     } finally {
       escanejantAra = false;
     }
@@ -1257,11 +1384,7 @@
 
       const fitxers = e.dataTransfer.files;
       if (!fitxers || !fitxers.length) return;
-
-      if (fitxers.length > 1) {
-        showToast('ℹ️ S\'escanejarà només el primer fitxer: ' + fitxers[0].name);
-      }
-      await escanejarFitxer(fitxers[0]);
+      await gestionarFitxersEscaneig(Array.from(fitxers));
     });
 
     // Enganxar una captura o un fitxer amb Ctrl+V / Cmd+V
@@ -1271,11 +1394,11 @@
       const actiu = document.activeElement;
       if (actiu && ['INPUT','TEXTAREA','SELECT'].includes(actiu.tagName)) return;
       if (escanejantAra) return;
-      const fitxer = e.clipboardData.files[0];
-      if (!tipusEscanejableOK(fitxer)) return;
+      const fitxers = Array.from(e.clipboardData.files).filter(tipusEscanejableOK);
+      if (!fitxers.length) return;
       e.preventDefault();
       zona.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      await escanejarFitxer(fitxer);
+      await gestionarFitxersEscaneig(fitxers);
     });
   })();
 
@@ -1371,7 +1494,7 @@
     const avis = document.getElementById('ia-summary-warning');
     if (avis) {
       const totalCalculat = document.getElementById('importTotal').value;
-      avis.innerHTML = `💡 <strong>Comprova que l'import total <span style="color:var(--blau-ter-dark)">${escapeHtml(totalCalculat || '—')}</span> coincideix amb el de la factura.</strong>`;
+      avis.innerHTML = `💡 <strong>Comprova que l'import total <span style="color:var(--blau-ter-dark)">${escapeHtml(totalCalculat ? totalCalculat + ' €' : '—')}</span> coincideix amb el de la factura.</strong> Si no, el pots corregir directament.`;
     }
 
     summary.classList.add('visible');
@@ -1468,6 +1591,18 @@
       }
     }
     // Recalculem
+    netejarManuals();
+    recalcular();
+
+    // Si la factura diu imports diferents dels calculats (arrodoniments, diversos
+    // articles...), mana el que posa la factura: els fixem com a valors editats.
+    const num = v => (valorBuit(v) || isNaN(parseFloat(v))) ? null : Math.round(parseFloat(v) * 100) / 100;
+    const r0 = calcularImports();
+    const ocrIVA = num(dades.importIVA), ocrIRPF = num(dades.importIRPF), ocrTotal = num(dades.importTotal);
+    if (ivaMode !== 'varis' && ocrIVA !== null && Math.abs(ocrIVA - r0.qIVA) > 0.009) manual.iva = ocrIVA;
+    if (ocrIRPF !== null && Math.abs(ocrIRPF - r0.qIRPF) > 0.009) manual.irpf = ocrIRPF;
+    const r1 = calcularImports();
+    if (ocrTotal !== null && Math.abs(ocrTotal - r1.total) > 0.009) manual.total = ocrTotal;
     recalcular();
 
     // Actualitzem el resum visual al capdamunt
@@ -1523,39 +1658,117 @@
       ivaMode = 'custom';
       customInput.classList.add('visible');
       varisInfo.classList.remove('visible');
-      ivaField.readOnly = true;
       ivaField.placeholder = 'Calculat';
     } else if (val === 'varis') {
       ivaMode = 'varis';
       customInput.classList.remove('visible');
       varisInfo.classList.add('visible');
-      ivaField.readOnly = false;
       ivaField.placeholder = "Introdueix l'import total d'IVA";
       ivaField.value = '';
     } else {
       ivaMode = 'normal';
       customInput.classList.remove('visible');
       varisInfo.classList.remove('visible');
-      ivaField.readOnly = true;
       ivaField.placeholder = 'Calculat';
     }
     recalcular();
   }
 
-  document.getElementById('importIVA').addEventListener('input', function() {
-    if (ivaMode === 'varis') recalcularDesIVA();
-  });
+  // ---- Imports editables ----
+  // Els imports es calculen sols, però qualsevol es pot sobreescriure a mà
+  // (o la IA els fixa si la factura diu una xifra diferent). Si es canvia la base
+  // o un percentatge, es torna a calcular tot automàticament.
+  let manual = { iva: null, irpf: null, total: null };
 
-  function recalcularDesIVA() {
-    const base   = parseFloat(document.getElementById('importSenseIVA').value) || 0;
-    const qIVA   = parseFloat(document.getElementById('importIVA').value) || 0;
-    const ambIVA = base + qIVA;
-    const pIRPF  = getPercIRPF();
-    const qIRPF  = base * pIRPF / 100;
-    document.getElementById('importAmbIVA').value = fmt(ambIVA);
-    document.getElementById('importIRPF').value   = fmt(qIRPF);
-    document.getElementById('importTotal').value  = fmt(ambIVA - qIRPF) + ' €';
+  function netejarManuals() {
+    manual = { iva: null, irpf: null, total: null };
   }
+
+  function canviBaseOPerc() {
+    netejarManuals();
+    recalcular();
+  }
+
+  function tornarACalcular() {
+    netejarManuals();
+    recalcular();
+  }
+
+  function llegirNum(id) {
+    const v = document.getElementById(id).value;
+    return (v === '' || isNaN(parseFloat(v))) ? null : parseFloat(v);
+  }
+
+  function getPercIVAStr() {
+    if (ivaMode === 'varis')  return 'Varis';
+    if (ivaMode === 'custom') return String(parseFloat(document.getElementById('percIVACustom').value) || 0);
+    return document.getElementById('percIVA').value;
+  }
+
+  // Calcula tots els imports tenint en compte els valors editats a mà
+  function calcularImports() {
+    const base  = parseFloat(document.getElementById('importSenseIVA').value) || 0;
+    const pIVAstr = getPercIVAStr();
+    let qIVA;
+    if (ivaMode === 'varis')      qIVA = llegirNum('importIVA') || 0;
+    else if (manual.iva !== null) qIVA = manual.iva;
+    else                          qIVA = base * (parseFloat(pIVAstr) || 0) / 100;
+    const pIRPF  = getPercIRPF();
+    const qIRPF  = manual.irpf !== null ? manual.irpf : base * pIRPF / 100;
+    const ambIVA = base + qIVA;
+    const total  = manual.total !== null ? manual.total : ambIVA - qIRPF;
+    const r2 = n => Math.round(n * 100) / 100;
+    return { base: r2(base), pIVAstr, qIVA: r2(qIVA), pIRPF, qIRPF: r2(qIRPF), ambIVA: r2(ambIVA), total: r2(total) };
+  }
+
+  // Escriu els imports calculats als camps (excepte el que l'usuari està editant)
+  function recalcular(excloure) {
+    const r = calcularImports();
+    const escriure = (id, val) => { if (id !== excloure) document.getElementById(id).value = fmt(val); };
+    if (ivaMode !== 'varis') escriure('importIVA', r.qIVA);
+    escriure('importAmbIVA', r.ambIVA);
+    escriure('importIRPF',   r.qIRPF);
+    escriure('importTotal',  r.total);
+
+    // Marquem visualment els valors editats a mà
+    const ambIVAmanual = manual.iva !== null;
+    document.getElementById('importIVA').classList.toggle('manual', ivaMode !== 'varis' && manual.iva !== null);
+    document.getElementById('importAmbIVA').classList.toggle('manual', ambIVAmanual);
+    document.getElementById('importIRPF').classList.toggle('manual', manual.irpf !== null);
+    document.getElementById('importTotal').classList.toggle('manual', manual.total !== null);
+    const hiHaManuals = manual.iva !== null || manual.irpf !== null || manual.total !== null;
+    document.getElementById('avis-manual').classList.toggle('visible', hiHaManuals);
+  }
+
+  // Compatibilitat amb crides antigues
+  function recalcularDesIVA() { recalcular(); }
+
+  document.getElementById('importIVA').addEventListener('input', function() {
+    if (ivaMode !== 'varis') manual.iva = llegirNum('importIVA');
+    recalcular('importIVA');
+  });
+  document.getElementById('importAmbIVA').addEventListener('input', function() {
+    const v = llegirNum('importAmbIVA');
+    const base = parseFloat(document.getElementById('importSenseIVA').value) || 0;
+    if (ivaMode === 'varis') {
+      document.getElementById('importIVA').value = v === null ? '' : fmt(v - base);
+    } else {
+      manual.iva = v === null ? null : Math.round((v - base) * 100) / 100;
+    }
+    recalcular('importAmbIVA');
+  });
+  document.getElementById('importIRPF').addEventListener('input', function() {
+    manual.irpf = llegirNum('importIRPF');
+    recalcular('importIRPF');
+  });
+  document.getElementById('importTotal').addEventListener('input', function() {
+    manual.total = llegirNum('importTotal');
+    recalcular('importTotal');
+  });
+  // En sortir d'un camp, el deixem formatat amb 2 decimals
+  ['importIVA','importAmbIVA','importIRPF','importTotal'].forEach(id => {
+    document.getElementById(id).addEventListener('blur', () => recalcular());
+  });
 
   function handleIRPF(val) {
     document.getElementById('percIRPFCustom').classList.toggle('visible', val === 'custom');
@@ -1566,22 +1779,6 @@
     let v = document.getElementById('percIRPF').value;
     if (v === 'custom') v = parseFloat(document.getElementById('percIRPFCustom').value) || 0;
     return parseFloat(v) || 0;
-  }
-
-  function recalcular() {
-    if (ivaMode === 'varis') { recalcularDesIVA(); return; }
-    const base  = parseFloat(document.getElementById('importSenseIVA').value) || 0;
-    let pIVA = ivaMode === 'custom'
-      ? parseFloat(document.getElementById('percIVACustom').value) || 0
-      : parseFloat(document.getElementById('percIVA').value) || 0;
-    const qIVA   = base * pIVA / 100;
-    const pIRPF  = getPercIRPF();
-    const qIRPF  = base * pIRPF / 100;
-    const ambIVA = base + qIVA;
-    document.getElementById('importIVA').value    = fmt(qIVA);
-    document.getElementById('importAmbIVA').value = fmt(ambIVA);
-    document.getElementById('importIRPF').value   = fmt(qIRPF);
-    document.getElementById('importTotal').value  = fmt(ambIVA - qIRPF) + ' €';
   }
 
   function fmt(n) { return n.toFixed(2); }
@@ -1826,21 +2023,8 @@
     const catC = document.getElementById('categoriaCustom').value.trim();
     if ((cat==='Altra'||cat==='Esdeveniments') && catC) cat = catC;
 
-    // Imports
-    const base = parseFloat(document.getElementById('importSenseIVA').value)||0;
-    let pIVAstr, qIVA;
-    if (ivaMode==='varis') {
-      pIVAstr='Varis'; qIVA=parseFloat(document.getElementById('importIVA').value)||0;
-    } else if (ivaMode==='custom') {
-      pIVAstr=String(parseFloat(document.getElementById('percIVACustom').value)||0);
-      qIVA=base*(parseFloat(pIVAstr)||0)/100;
-    } else {
-      pIVAstr=document.getElementById('percIVA').value;
-      qIVA=base*(parseFloat(pIVAstr)||0)/100;
-    }
-    const pIRPF  = getPercIRPF();
-    const qIRPF  = base*pIRPF/100;
-    const ambIVA = base+qIVA;
+    // Imports (respecten els valors editats a mà)
+    const imp = calcularImports();
 
     // Convertir fitxers a base64
     setProgress(30, 'Processant arxius adjunts...');
@@ -1871,13 +2055,13 @@
       concepte:       document.getElementById('concepte').value.trim(),
       proveidor:      document.getElementById('proveidor').value.trim(),
       nifProveidor:   document.getElementById('nifProveidor').value.trim(),
-      importSenseIVA: base.toFixed(2),
-      percIVA:        pIVAstr,
-      importIVA:      qIVA.toFixed(2),
-      percIRPF:       String(pIRPF),
-      importIRPF:     qIRPF.toFixed(2),
-      importAmbIVA:   ambIVA.toFixed(2),
-      importTotal:    (ambIVA-qIRPF).toFixed(2),
+      importSenseIVA: imp.base.toFixed(2),
+      percIVA:        imp.pIVAstr,
+      importIVA:      imp.qIVA.toFixed(2),
+      percIRPF:       String(imp.pIRPF),
+      importIRPF:     imp.qIRPF.toFixed(2),
+      importAmbIVA:   imp.ambIVA.toFixed(2),
+      importTotal:    imp.total.toFixed(2),
       comentaris:     document.getElementById('comentaris').value.trim(),
       arxius:         arxiusB64   // array de {name, type, data}
     };
@@ -1888,23 +2072,14 @@
       setProgress(100, 'Enviat!');
       if (result.success) {
         showToast('✅ Factura enviada correctament! Els arxius són a Google Drive.');
-        // Reset
-        document.getElementById('factura-form').reset();
-        document.getElementById('codiSecret').value = '';
-        document.getElementById('iban-wrap').style.display = 'none';
-        document.getElementById('tipus-info-factura').classList.remove('visible');
-        netejarMarcatgeIA();
-        // Reset previsualització escàner
-        document.getElementById('scan-preview').classList.remove('visible');
-        document.getElementById('scan-status').innerHTML = '';
-        selectedFiles=[]; renderFiles(); ivaMode='normal';
-        ['categoria-custom-wrap','varis-iva-info'].forEach(id=>document.getElementById(id).classList.remove('visible'));
-        ['percIVACustom','percIRPFCustom'].forEach(id=>document.getElementById(id).classList.remove('visible'));
-        const ivaF=document.getElementById('importIVA'); ivaF.readOnly=true; ivaF.placeholder='Calculat';
-        recalcular();
-        // Restaurem malnom i IBAN guardats al navegador per comoditat
-        carregarDadesGuardades();
-        window.scrollTo({top:0,behavior:'smooth'});
+        // Si hi ha una cua de factures, mantenim les dades del soci i passem a la següent
+        const hiHaCua = cuaFactures.length > 0;
+        reiniciarFormulari(hiHaCua);
+        if (hiHaCua) {
+          passarSeguentCua();
+        } else {
+          window.scrollTo({top:0,behavior:'smooth'});
+        }
       } else {
         throw new Error(result.error||'Error desconegut');
       }
@@ -1915,6 +2090,43 @@
       setTimeout(()=>{ progWrap.classList.remove('visible'); setProgress(0,''); }, 2000);
     }
   });
+
+  // ---- Reinicia el formulari ----
+  // mantenirSoci=true conserva codi, malnom, qui ha pagat i IBAN (per a la cua de factures)
+  function reiniciarFormulari(mantenirSoci) {
+    const codi = document.getElementById('codiSecret').value;
+    const pagat = document.querySelector('input[name="haPagat"]:checked');
+    const pagatVal = pagat ? pagat.value : null;
+    const iban = document.getElementById('iban').value;
+    const malnom = document.getElementById('malnom').value;
+
+    document.getElementById('factura-form').reset();
+    document.getElementById('codiSecret').value = '';
+    document.getElementById('iban-wrap').style.display = 'none';
+    document.getElementById('tipus-info-factura').classList.remove('visible');
+    netejarMarcatgeIA();
+    document.querySelectorAll('.camp-error').forEach(el => el.classList.remove('camp-error'));
+    document.getElementById('scan-preview').classList.remove('visible');
+    document.getElementById('scan-status').innerHTML = '';
+    selectedFiles = []; renderFiles(); ivaMode = 'normal';
+    ['categoria-custom-wrap','varis-iva-info'].forEach(id=>document.getElementById(id).classList.remove('visible'));
+    ['percIVACustom','percIRPFCustom'].forEach(id=>document.getElementById(id).classList.remove('visible'));
+    document.getElementById('importIVA').placeholder = 'Calculat';
+    netejarManuals();
+    recalcular();
+    // Restaurem malnom i IBAN guardats al navegador per comoditat
+    carregarDadesGuardades();
+
+    if (mantenirSoci) {
+      document.getElementById('codiSecret').value = codi;
+      document.getElementById('malnom').value = malnom;
+      document.getElementById('iban').value = iban;
+      if (pagatVal) {
+        const radio = document.querySelector(`input[name="haPagat"][value="${pagatVal}"]`);
+        if (radio) { radio.checked = true; handleHaPagat(pagatVal); }
+      }
+    }
+  }
 
   // ---- Event listener: quan l'usuari edita un camp marcat per la IA, treu el destacat ----
   // Aplica el verd "ia-filled" només mentre no s'ha tocat — un cop tocat, es considera verificat
