@@ -331,12 +331,43 @@
   .scan-multi.visible, .scan-cua.visible { display: block; }
   .scan-multi-files { margin: 6px 0 10px; color: var(--text-dim); font-size: 0.82rem; word-break: break-word; }
   .scan-multi .scan-buttons { margin-top: 0; }
-  .scan-cua { display: none; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
-  .scan-cua.visible { display: flex; }
-  .scan-cua button {
-    border: 1px solid var(--border-strong); background: var(--surface-alt);
-    border-radius: 6px; padding: 5px 10px; font-size: 0.82rem; cursor: pointer;
+  /* Barra "Factura X de Y" enganxada sota la capçalera */
+  .scan-cua {
+    display: none;
+    position: absolute; left: 0; right: 0; top: 100%;
+    margin: 0; border-radius: 0; border: none;
+    background: var(--blau-ter); color: #fff;
+    padding: 10px 24px;
+    align-items: center; justify-content: center; gap: 14px; flex-wrap: wrap;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+    font-size: 0.92rem;
   }
+  .scan-cua.visible { display: flex; }
+  .scan-cua-num { font-weight: 700; font-size: 1.05rem; letter-spacing: 0.2px; }
+  .scan-cua-file { opacity: 0.85; font-size: 0.82rem; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .scan-cua button {
+    border: 1px solid rgba(255,255,255,0.5); background: transparent; color: #fff;
+    border-radius: 6px; padding: 4px 10px; font-size: 0.8rem; cursor: pointer;
+  }
+  .scan-cua button:hover { background: rgba(255,255,255,0.15); }
+  body.amb-cua main { padding-top: 76px; }
+  /* Banner de novetats */
+  .banner-nou {
+    display: flex; align-items: center; gap: 12px;
+    margin-bottom: 18px; padding: 12px 16px;
+    background: #E8F2FA; border: 1px solid #B9D6EC; border-radius: 8px;
+    color: var(--blau-ter-dark); font-size: 0.92rem;
+  }
+  .banner-nou .banner-tag {
+    background: var(--blau-ter); color: #fff; font-size: 0.72rem; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.5px; padding: 3px 8px; border-radius: 4px; flex-shrink: 0;
+  }
+  .banner-nou .banner-text { flex: 1; }
+  .banner-nou button {
+    border: none; background: transparent; color: var(--blau-ter-dark);
+    font-size: 1.2rem; line-height: 1; cursor: pointer; padding: 2px 6px; flex-shrink: 0;
+  }
+  .banner-nou.amagat { display: none; }
 
   .extra-input { display:none; margin-top:8px; }
   .extra-input.visible { display:block; }
@@ -808,9 +839,23 @@
     <h1>Marrecs de Salt</h1>
     <p>Gestió de factures · Tresoreria</p>
   </div>
+  <!-- Barra de la cua de factures (apareix quan es pugen diverses factures) -->
+  <div class="scan-cua" id="scan-cua" role="status" aria-live="polite">
+    <span class="scan-cua-num" id="scan-cua-num"></span>
+    <span class="scan-cua-file" id="scan-cua-file"></span>
+    <span>
+      <button type="button" onclick="saltarFacturaCua()">Saltar aquesta ›</button>
+      <button type="button" onclick="cancellarCua()">Cancel·lar</button>
+    </span>
+  </div>
 </header>
 
 <main>
+  <div class="banner-nou" id="banner-nou">
+    <span class="banner-tag">Nou</span>
+    <span class="banner-text"><strong>Nova versió:</strong> ara pots penjar més d'una factura a la vegada.</span>
+    <button type="button" onclick="tancarBannerNou()" aria-label="Tancar">×</button>
+  </div>
   <div class="page-intro">
     <h2>Nova petició de factura</h2>
     <p>Emplena el formulari per enviar una factura al tresorer. Els camps marcats amb <span style="color:#5bb3e8">*</span> són obligatoris. Els imports es calculen automàticament.</p>
@@ -848,17 +893,9 @@
       <strong id="scan-multi-title">Has pujat diversos fitxers. Què són?</strong>
       <div class="scan-multi-files" id="scan-multi-files"></div>
       <div class="scan-buttons">
-        <button type="button" class="btn-scan" onclick="triarMultiFitxers('mateixa')">📄 Pàgines d'una mateixa factura</button>
-        <button type="button" class="btn-scan secondary" onclick="triarMultiFitxers('diferents')">📚 Factures diferents (una per una)</button>
+        <button type="button" class="btn-scan" onclick="triarMultiFitxers('diferents')">📚 Són factures diferents</button>
+        <button type="button" class="btn-scan secondary" onclick="triarMultiFitxers('mateixa')">📄 Són pàgines d'una mateixa factura</button>
       </div>
-    </div>
-    <!-- Cua de factures pendents -->
-    <div class="scan-cua" id="scan-cua">
-      <span id="scan-cua-text"></span>
-      <span>
-        <button type="button" onclick="saltarFacturaCua()">Saltar aquesta ›</button>
-        <button type="button" onclick="cancellarCua()">Cancel·lar cua</button>
-      </span>
     </div>
     <div class="scan-status" id="scan-status"></div>
     <div class="scan-hint">També pots <strong>arrossegar i deixar anar</strong> un o diversos fitxers sobre aquest requadre, o enganxar-lo amb <strong>Ctrl+V</strong>.</div>
@@ -1226,15 +1263,41 @@
   }
 
   // ---- Cua de factures diferents ----
+  // Text "X de Y" de la factura actual de la cua (buit si no hi ha cua)
+  function textCua() {
+    return cuaFactures.length ? (cuaIndex + 1) + ' de ' + cuaFactures.length : '';
+  }
+
+  // Text del botó d'enviar segons si hi ha cua o no
+  function textBotoEnviar() {
+    return cuaFactures.length ? 'Enviar factura ' + textCua() : 'Enviar factura';
+  }
+
   function actualitzarBannerCua() {
     const banner = document.getElementById('scan-cua');
-    if (!cuaFactures.length) { banner.classList.remove('visible'); return; }
-    document.getElementById('scan-cua-text').innerHTML =
-      '📚 <strong>Factura ' + (cuaIndex + 1) + ' de ' + cuaFactures.length + '</strong> · ' +
-      escapeHtml(cuaFactures[cuaIndex].name) +
-      (cuaIndex + 1 < cuaFactures.length ? ' — en enviar-la es carregarà la següent' : ' — és l\'última');
+    const btn = document.getElementById('btn-submit');
+    if (!cuaFactures.length) {
+      banner.classList.remove('visible');
+      document.body.classList.remove('amb-cua');
+      if (!btn.disabled) btn.innerHTML = textBotoEnviar();
+      return;
+    }
+    document.getElementById('scan-cua-num').textContent = '📚 Factura ' + textCua();
+    document.getElementById('scan-cua-file').textContent = cuaFactures[cuaIndex].name;
     banner.classList.add('visible');
+    document.body.classList.add('amb-cua');
+    if (!btn.disabled) btn.innerHTML = textBotoEnviar();
   }
+
+  // ---- Banner de novetats ----
+  const BANNER_KEY = 'marrecs_banner_multi_v1';
+  function tancarBannerNou() {
+    document.getElementById('banner-nou').classList.add('amagat');
+    try { localStorage.setItem(BANNER_KEY, '1'); } catch(_) {}
+  }
+  (function () {
+    try { if (localStorage.getItem(BANNER_KEY)) document.getElementById('banner-nou').classList.add('amagat'); } catch(_) {}
+  })();
 
   async function escanejarFacturaCua() {
     if (cuaIndex >= cuaFactures.length) { cancellarCua(true); return; }
@@ -1245,11 +1308,11 @@
   async function passarSeguentCua() {
     cuaIndex++;
     if (cuaIndex >= cuaFactures.length) {
-      showToast('✅ Has acabat totes les factures de la cua.');
+      showToast('✅ Totes les factures enviades (' + cuaFactures.length + ' de ' + cuaFactures.length + ').');
       cancellarCua(true);
       return;
     }
-    document.getElementById('scan-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
     await escanejarFacturaCua();
   }
 
@@ -1262,7 +1325,7 @@
   function cancellarCua(silenciós) {
     const n = cuaFactures.length - cuaIndex - 1;
     cuaFactures = []; cuaIndex = 0;
-    document.getElementById('scan-cua').classList.remove('visible');
+    actualitzarBannerCua();
     if (!silenciós && n > 0) showToast('Cua cancel·lada (' + n + ' pendents descartades).');
   }
 
@@ -2014,7 +2077,7 @@
 
     // A partir d'aquí tot és vàlid — activem el mode "enviant"
     btn.disabled   = true;
-    btn.innerHTML  = '<span class="spinner"></span>Enviant...';
+    btn.innerHTML  = '<span class="spinner"></span>Enviant' + (cuaFactures.length ? ' factura ' + textCua() : '') + '...';
     progWrap.classList.add('visible');
     setProgress(10, 'Preparant les dades...');
 
@@ -2035,7 +2098,7 @@
       }
     } catch(err) {
       showToast('❌ Error processant arxius: '+err.message, 'error');
-      btn.disabled=false; btn.innerHTML='Enviar factura';
+      btn.disabled=false; btn.innerHTML=textBotoEnviar();
       progWrap.classList.remove('visible');
       return;
     }
@@ -2071,7 +2134,9 @@
       const result = await resp.json();
       setProgress(100, 'Enviat!');
       if (result.success) {
-        showToast('✅ Factura enviada correctament! Els arxius són a Google Drive.');
+        showToast(cuaFactures.length
+          ? '✅ Factura ' + textCua() + ' enviada correctament!'
+          : '✅ Factura enviada correctament! Els arxius són a Google Drive.');
         // Si hi ha una cua de factures, mantenim les dades del soci i passem a la següent
         const hiHaCua = cuaFactures.length > 0;
         reiniciarFormulari(hiHaCua);
@@ -2086,7 +2151,7 @@
     } catch(err) {
       showToast('❌ Error en enviar: '+err.message,'error');
     } finally {
-      btn.disabled=false; btn.innerHTML='Enviar factura';
+      btn.disabled=false; btn.innerHTML=textBotoEnviar();
       setTimeout(()=>{ progWrap.classList.remove('visible'); setProgress(0,''); }, 2000);
     }
   });
