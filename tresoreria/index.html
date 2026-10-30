@@ -78,7 +78,7 @@ const norm=s=>String(s||'').toUpperCase().trim().replace(/\s+/g,' ');
 function toast(t){const e=document.createElement('div');e.className='toast';e.textContent=t;document.body.appendChild(e);setTimeout(()=>e.remove(),2600)}
 function fail(e){console.error(e);alert('Error: '+(e.message||e));}
 
-const S={user:null,membre:null,tab:'resum',any:new Date().getFullYear(),fact:[],desp:[],mov:[],conc:[],cats:[],clt:[],q:{}};
+const S={user:null,membre:null,tab:'resum',per:{k:'any'},sub:[],pres:[],fact:[],desp:[],mov:[],conc:[],cats:[],clt:[],q:{}};
 const pot=()=>S.membre&&['admin','editor'].includes(S.membre.rol);
 
 /* ---------- AUTH ---------- */
@@ -114,14 +114,16 @@ async function start(){
 async function all(q){let out=[],from=0;for(;;){const {data,error}=await q().range(from,from+999);if(error)throw error;out=out.concat(data);if(data.length<1000)break;from+=1000;}return out;}
 async function loadAll(){
   try{
-    const [f,d,m,c,cats,clt]=await Promise.all([
+    const [f,d,m,c,cats,clt,sv,pr]=await Promise.all([
       all(()=>sb.from('factures_emeses').select('*').order('num')),
       all(()=>sb.from('despeses').select('*,despesa_fitxers(count)').order('data',{ascending:false})),
       all(()=>sb.from('moviments').select('*').order('data',{ascending:false}).order('saldo',{ascending:true})),
       all(()=>sb.from('conciliacions').select('*')),
       all(()=>sb.from('categories').select('*').order('nom')),
-      all(()=>sb.from('categories_clt').select('*').order('ordre'))]);
-    Object.assign(S,{fact:f,desp:d,mov:m,conc:c,cats,clt});
+      all(()=>sb.from('categories_clt').select('*').order('ordre')),
+      all(()=>sb.from('subvencions').select('*').order('any_sub',{ascending:false}).order('ens')),
+      all(()=>sb.from('pressupost_clt').select('*'))]);
+    Object.assign(S,{fact:f,desp:d,mov:m,conc:c,cats,clt,sub:sv,pres:pr});
   }catch(e){fail(e)}
 }
 const catNom=id=>S.cats.find(c=>c.id===id)?.nom||'';
@@ -129,18 +131,28 @@ const cltNom=c=>S.clt.find(x=>x.codi===c)?.nom||'';
 const yr=d=>d?+d.slice(0,4):null;
 
 /* ---------- LAYOUT ---------- */
-const TABS={resum:'Resum',factures:'Factures emeses',despeses:'Despeses',banc:'Banc'};
+const TABS={resum:'Resum',factures:'Factures emeses',despeses:'Despeses',subvencions:'Subvencions',banc:'Banc'};
 function render(){
-  const anys=[...new Set([...S.fact.map(x=>yr(x.data)),...S.desp.map(x=>yr(x.data)),...S.mov.map(x=>yr(x.data)),new Date().getFullYear()].filter(Boolean))].sort((a,b)=>b-a);
   $('#app').innerHTML=`<header><h1>Tresoreria Marrecs</h1><nav>${Object.entries(TABS).map(([k,v])=>`<button data-t="${k}" class="${S.tab===k?'on':''}">${v}</button>`).join('')}</nav><span class="sp"></span>
-  <select id="any">${anys.map(a=>`<option ${a==S.any?'selected':''}>${a}</option>`).join('')}<option value="0" ${S.any==0?'selected':''}>Tots</option></select>
+  <select id="per" title="Període">${Object.entries(PERS).map(([k,v])=>`<option value="${k}" ${S.per.k===k?'selected':''}>${v}</option>`).join('')}</select>
+  ${S.per.k==='cust'?`<input type="date" id="pf" value="${S.per.from||''}"> – <input type="date" id="pt" value="${S.per.to||''}">`:''}
   <span class="mut" style="font-size:12px">${esc(S.membre.nom||S.user.email)} · ${S.membre.rol}</span><button class="b sm" id="out">Sortir</button></header><main id="m"></main>`;
   document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{S.tab=b.dataset.t;render()});
-  $('#any').onchange=e=>{S.any=+e.target.value;render()};
+  $('#per').onchange=e=>{S.per.k=e.target.value;if(e.target.value==='cust'&&!S.per.from){const r=perRange('any');S.per.from=r[0];S.per.to=r[1];}render()};
+  if($('#pf')){$('#pf').onchange=e=>{S.per.from=e.target.value;render()};$('#pt').onchange=e=>{S.per.to=e.target.value;render()};}
   $('#out').onclick=()=>sb.auth.signOut();
-  ({resum:vResum,factures:vFact,despeses:vDesp,banc:vBanc})[S.tab]();
+  ({resum:vResum,factures:vFact,despeses:vDesp,subvencions:vSub,banc:vBanc})[S.tab]();
 }
-const inAny=d=>!S.any||yr(d)===S.any;
+const PERS={any:'Any actual',anyant:'Any anterior',trim:'Trimestre actual',mes:'Mes actual',mesant:'Mes anterior',tot:'Tot',cust:'Dates personalitzades'};
+const iso=d=>new Date(d.getTime()-d.getTimezoneOffset()*6e4).toISOString().slice(0,10);
+function perRange(k=S.per.k){const n=new Date(),Y=n.getFullYear(),M=n.getMonth();
+  switch(k){case 'any':return[`${Y}-01-01`,`${Y}-12-31`];case 'anyant':return[`${Y-1}-01-01`,`${Y-1}-12-31`];
+  case 'mes':return[iso(new Date(Y,M,1)),iso(new Date(Y,M+1,0))];case 'mesant':return[iso(new Date(Y,M-1,1)),iso(new Date(Y,M,0))];
+  case 'trim':{const q=Math.floor(M/3)*3;return[iso(new Date(Y,q,1)),iso(new Date(Y,q+3,0))];}
+  case 'cust':return[S.per.from||'0000-01-01',S.per.to||'9999-12-31'];default:return null;}}
+const inAny=d=>{const r=perRange();return !r||(!!d&&d>=r[0]&&d<=r[1]);};
+const perYear=()=>{const r=perRange();return r?+r[0].slice(0,4):new Date().getFullYear();};
+const perLabel=()=>S.per.k==='any'?String(perYear()):S.per.k==='anyant'?String(perYear()):S.per.k==='cust'?`${fd(S.per.from)}–${fd(S.per.to)}`:PERS[S.per.k].toLowerCase();
 
 /* ---------- GENERIC EDIT DIALOG (edit → confirm) ---------- */
 function openDlg(title,body,foot){$('#dt').textContent=title;$('#dbody').innerHTML=body;$('#dfoot').innerHTML='';foot.forEach(b=>{const e=document.createElement('button');e.className='b'+(b.p?' p':'');e.textContent=b.t;e.onclick=b.f;$('#dfoot').appendChild(e)});if(!dlg.open)dlg.showModal();}
@@ -184,20 +196,26 @@ function vResum(){
   const desp=sum(D,d=>d.total),nopag=sum(D.filter(d=>!d.pagada),d=>d.total);
   const saldo=S.mov[0]?.saldo;const pend=M.filter(m=>m.estat==='pendent').length;
   const byClt={};D.forEach(d=>{const k=d.clt_codi||'—';(byClt[k]=byClt[k]||{n:0,t:0,b:0});byClt[k].n++;byClt[k].t+=Number(d.total||0);byClt[k].b+=Number(d.base??d.total??0)});
-  const rows=S.clt.filter(c=>c.tipus==='despesa').map(c=>{const r=byClt[c.codi];if(!r)return'';const over=c.maxim&&r.t>c.maxim;
-    return `<tr class="cl" data-c="${c.codi}"><td class="nw">${c.codi}</td><td>${esc(c.nom)}</td><td>${c.subvencionable?'Sí':'<span class="mut">No</span>'}</td><td class="n">${r.n}</td><td class="n">${eur(r.b)}</td><td class="n">${eur(r.t)}</td><td class="n ${over?'neg':''}">${c.maxim?eur(c.maxim):''}</td></tr>`}).join('');
+  const PY=perYear(),pres=c=>Number(S.pres.find(p=>p.any_pres===PY&&p.clt_codi===c)?.import||0);
+  const pctCell=(t,p)=>{if(!p)return '<td></td>';const x=t/p*100;return `<td class="n"><span class="pill ${x>100?'no':x<50?'wa':'ok'}">${x.toLocaleString('ca-ES',{maximumFractionDigits:0})} %</span></td>`;};
+  let tT=0,tP=0;
+  const rows=S.clt.filter(c=>c.tipus==='despesa').map(c=>{const r=byClt[c.codi]||{n:0,t:0,b:0};const p=pres(c.codi);if(!r.n&&!p)return'';const over=c.maxim&&r.t>c.maxim;
+    if(c.subvencionable){tT+=r.t;tP+=p;}
+    return `<tr class="cl" data-c="${c.codi}"><td class="nw">${c.codi}</td><td>${esc(c.nom)}</td><td>${c.subvencionable?'Sí':'<span class="mut">No</span>'}</td><td class="n">${r.n}</td><td class="n">${eur(r.t)}</td><td class="n">${p?eur(p):''}</td>${pctCell(r.t,p)}<td class="n ${over?'neg':''}">${c.maxim?eur(c.maxim):''}</td></tr>`}).join('');
   const sense=byClt['—'];
   const sub=sum(D.filter(d=>S.clt.find(c=>c.codi===d.clt_codi)?.subvencionable),d=>d.total);
   $('#m').innerHTML=`<div class="kpis">
   <div class="card kpi"><div class="l">Saldo bancari (últim moviment)</div><div class="v">${eur(saldo)}</div><div class="mut" style="font-size:12px">${S.mov[0]?fd(S.mov[0].data):'Sense extracte'}</div></div>
-  <div class="card kpi"><div class="l">Facturat ${S.any||''}</div><div class="v">${eur(emes)}</div></div>
+  <div class="card kpi"><div class="l">Facturat (${perLabel()})</div><div class="v">${eur(emes)}</div></div>
   <div class="card kpi"><div class="l">Pendent de cobrar</div><div class="v ${emes-cobrat>0?'neg':''}">${eur(emes-cobrat)}</div></div>
-  <div class="card kpi"><div class="l">Despeses ${S.any||''}</div><div class="v">${eur(desp)}</div><div class="mut" style="font-size:12px">${eur(sub)} subvencionables</div></div>
+  <div class="card kpi"><div class="l">Despeses (${perLabel()})</div><div class="v">${eur(desp)}</div><div class="mut" style="font-size:12px">${eur(sub)} subvencionables</div></div>
   <div class="card kpi"><div class="l">Despeses no pagades</div><div class="v ${nopag?'neg':''}">${eur(nopag)}</div></div>
+  <div class="card kpi"><div class="l">Subvencions pendents de cobrar (${PY})</div><div class="v">${eur(S.sub.filter(x=>x.any_sub===PY&&x.estat!=='Denegada').reduce((a,x)=>a+subPend(x),0))}</div></div>
   <div class="card kpi"><div class="l">Moviments per conciliar</div><div class="v">${pend}</div></div></div>
-  <h3>Despeses per partida CLT027</h3>
-  <div class="tw"><table><tr><th>Codi</th><th>Partida</th><th>Subv.</th><th class="n">Núm.</th><th class="n">Base</th><th class="n">Total</th><th class="n">Màxim</th></tr>${rows}
-  ${sense?`<tr><td>—</td><td class="neg">Sense partida assignada</td><td></td><td class="n">${sense.n}</td><td class="n">${eur(sense.b)}</td><td class="n">${eur(sense.t)}</td><td></td></tr>`:''}</table></div>
+  <h3>Despeses per partida CLT027</h3><p class="mut" style="font-size:12px;margin-top:-4px">El % compara el que s'ha gastat amb el pressupost sol·licitat a la CLT027 de ${PY}. Per sota del 50 % es perd la subvenció; entre el 50 i el 100 % es redueix proporcionalment.${S.per.k!=='any'&&S.per.k!=='anyant'?' <b>Tria un any sencer al filtre de període per comparar bé.</b>':''}</p>
+  <div class="tw"><table><tr><th>Codi</th><th>Partida</th><th>Subv.</th><th class="n">Núm.</th><th class="n">Executat</th><th class="n">Sol·licitat ${PY}</th><th class="n">% executat</th><th class="n">Màxim</th></tr>${rows}
+  <tr><td></td><td><b>Total subvencionable</b></td><td></td><td></td><td class="n"><b>${eur(tT)}</b></td><td class="n"><b>${tP?eur(tP):''}</b></td>${pctCell(tT,tP)}<td></td></tr>
+  ${sense?`<tr><td>—</td><td class="neg">Sense partida assignada</td><td></td><td class="n">${sense.n}</td><td class="n">${eur(sense.t)}</td><td></td><td></td><td></td></tr>`:''}</table></div>
   <h3>Factures pendents de cobrar</h3>
   <div class="tw">${factTable(F.filter(f=>f.estat!=='Cobrada'))}</div>`;
   document.querySelectorAll('tr[data-c]').forEach(t=>t.onclick=()=>{S.tab='despeses';S.q.clt=t.dataset.c;render()});
@@ -248,7 +266,7 @@ function vDesp(){
   <span class="mut">${D.length} · ${eur(tot)}</span><span class="sp"></span>${pot()?'<button class="b p" id="nd">+ Nova despesa</button>':''}</div>
   <div class="tw"><table><tr><th>Data</th><th>Proveïdor</th><th>Concepte</th><th class="n">Total</th><th>Categoria</th><th>Partida</th><th>Persona</th><th>Pagada</th><th>📎</th></tr>
   ${D.map(d=>`<tr class="cl" data-d="${d.id}"><td class="nw">${fd(d.data)}</td><td>${esc(d.proveidor)}</td><td>${esc(d.concepte)}</td><td class="n">${eur(d.total)}</td><td>${esc(catNom(d.categoria_id))}</td>
-  <td class="nw" title="${esc(cltNom(d.clt_codi))}">${esc(d.clt_codi||'—')}${d.clt_manual?' ✎':''}</td><td>${esc(d.persona)}</td><td>${d.pagada?'<span class="pill ok">Sí</span>':'<span class="pill wa">No</span>'}</td><td>${d.despesa_fitxers?.[0]?.count||(d.fitxer_original?'<span class="mut" title="Fitxer encara a Drive">·</span>':'')}</td></tr>`).join('')}</table></div>`;
+  <td class="nw" title="${esc(cltNom(d.clt_codi))}">${esc(d.clt_codi||'—')}${d.clt_manual?' ✎':''}</td><td>${esc(d.persona)}</td><td>${d.pagada?'<span class="pill ok">Sí</span>':'<span class="pill wa">No</span>'}</td><td>${d.despesa_fitxers?.[0]?.count?'📎'+(d.despesa_fitxers[0].count>1?d.despesa_fitxers[0].count:''):''}</td></tr>`).join('')}</table></div>`;
   $('#qd').oninput=e=>{S.q.d=e.target.value;const p=e.target.selectionStart;vDesp();$('#qd').focus();$('#qd').setSelectionRange(p,p)};
   $('#dc').onchange=e=>{S.q.cat=e.target.value;vDesp()};$('#dl').onchange=e=>{S.q.clt=e.target.value;vDesp()};$('#dp').onchange=e=>{S.q.pg=e.target.value;vDesp()};
   if($('#nd'))$('#nd').onclick=()=>despDlg({data:new Date().toISOString().slice(0,10),pagada:false,comptabilitzada:false,origen:'manual',iva_pct:'21'});
@@ -258,15 +276,19 @@ async function despDlg(d){
   delete d.despesa_fitxers;
   let files=[];
   if(d.id){const {data}=await sb.from('despesa_fitxers').select('*').eq('despesa_id',d.id);files=data||[];
-    const signed=await Promise.all(files.map(f=>sb.storage.from('documents').createSignedUrl(f.path,3600)));signed.forEach((s,i)=>files[i].url=s.data?.signedUrl);}
-  const fhtml=`<h3>Documents</h3><div class="files">${files.map(f=>`<a href="${esc(f.url)}" target="_blank" rel="noopener">${/^image\//.test(f.mime||'')?`<img src="${esc(f.url)}" alt="">`:'<div class="doc">📄</div>'}${esc(f.nom||f.path.split('/').pop())}</a>`).join('')||'<span class="mut">Cap document adjunt.</span>'}</div>
-   ${d.fitxer_original&&!files.length?`<p class="mut" style="font-size:12px">Fitxer original (encara a Drive): ${esc(d.fitxer_original)}</p>`:''}
-   ${d.id&&pot()?`<div class="bar" style="margin-top:8px"><input type="file" id="up" multiple accept="image/*,application/pdf"><button class="b sm" id="bup2">Puja</button></div>`:''}
+    const signed=await Promise.all(files.map(f=>f.path?sb.storage.from('documents').createSignedUrl(f.path,3600):Promise.resolve(null)));
+    signed.forEach((s,i)=>{if(s)files[i].url=s.data?.signedUrl;const g=(files[i].url||'').match(/drive\.google\.com\/file\/d\/([\w-]+)/);if(g)files[i].thumb=`https://drive.google.com/thumbnail?id=${g[1]}&sz=w240`;});}
+  const fhtml=`<h3>Documents</h3><div class="files">${files.map(f=>`<a href="${esc(f.url)}" target="_blank" rel="noopener">${f.thumb?`<img src="${esc(f.thumb)}" alt="" referrerpolicy="no-referrer" onerror="this.outerHTML='<div class=doc>${/^image\//.test(f.mime||'')?'🖼️':'📄'}</div>'">`:/^image\//.test(f.mime||'')?`<img src="${esc(f.url)}" alt="">`:'<div class="doc">📄</div>'}${esc(f.nom||(f.path||'').split('/').pop())}${f.path?'':'<span class="mut">Drive ↗</span>'}</a>`).join('')||'<span class="mut">Cap document adjunt.</span>'}</div>
+
+   ${d.id&&pot()?`<div class="bar" style="margin-top:8px"><input type="file" id="up" multiple accept="image/*,application/pdf"><button class="b sm" id="bup2">Puja</button></div>
+   <div class="bar"><input id="lnk" placeholder="…o enganxa un enllaç de Drive" style="flex:1"><button class="b sm" id="blnk">Afegeix enllaç</button></div>`:''}
    ${d.id?`<p class="mut" style="font-size:12px">Origen: ${esc(d.origen)}${d.clt_manual?' · partida fixada manualment':''}</p>`:''}`;
   if(!pot()){openDlg('Despesa',`<div class="fg">${DFIELDS.map(f=>`<label class="${f.w?'w':''}">${esc(f.l)}<b style="color:var(--ink)">${esc(showVal(f,d[f.k]))}</b></label>`).join('')}</div>${fhtml}`,[{t:'Tanca',f:()=>dlg.close()}]);return;}
   editRecord({title:d.id?'Despesa':'Nova despesa',fields:DFIELDS,rec:d,table:'despeses',extra:fhtml,
     after:(ch,rec)=>{if('clt_codi' in ch)ch.clt_manual=!!ch.clt_codi;if(!rec.id)ch.origen='manual';}});
   const b=$('#bup2');if(b)b.onclick=()=>uploadFiles(d.id,$('#up').files);
+  const bl=$('#blnk');if(bl)bl.onclick=async()=>{const u=$('#lnk').value.trim();if(!/^https?:\/\//.test(u))return toast('Enganxa un enllaç vàlid');
+    const {error}=await sb.from('despesa_fitxers').insert({despesa_id:d.id,url:u,nom:prompt('Nom del document:','Factura')||'Document'});if(error)return fail(error);toast('Enllaç afegit');await loadAll();despDlg({...S.desp.find(x=>x.id===d.id)});};
 }
 async function uploadFiles(id,fl){
   if(!fl.length)return;
@@ -275,6 +297,42 @@ async function uploadFiles(id,fl){
     const {error}=await sb.storage.from('documents').upload(path,f,{contentType:f.type});if(error)return fail(error);
     const r=await sb.from('despesa_fitxers').insert({despesa_id:id,path,nom:f.name,mime:f.type,mida:f.size});if(r.error)return fail(r.error);}
   toast('Document pujat');await loadAll();despDlg({...S.desp.find(x=>x.id===id)});
+}
+
+/* ---------- SUBVENCIONS ---------- */
+const SEST=['Prevista','Sol·licitada','Concedida','Denegada','Justificada','Cobrada'];
+const subCobrat=x=>S.conc.filter(c=>c.subvencio_id===x.id).reduce((a,c)=>a+Number(c.import||0),0);
+const subEsperat=x=>x.estat==='Denegada'?0:Number(x.import_concedit??x.import_sollicitat??0);
+const subPend=x=>Math.max(0,subEsperat(x)-subCobrat(x));
+const ENS=['Generalitat de Catalunya – Departament de Cultura','Ajuntament de Girona','Ajuntament de Salt','Diputació de Girona','Altres'];
+const SFIELDS=[{k:'any_sub',l:'Any (activitat)',t:'num'},{k:'ens',l:'Ens',t:'sel',o:()=>[...new Set([...ENS,...S.sub.map(x=>x.ens)])].map(e=>[e,e])},
+  {k:'convocatoria',l:'Convocatòria / línia',w:1},{k:'codi',l:'Codi (p. ex. CLT027)'},{k:'expedient',l:'Núm. expedient'},
+  {k:'estat',l:'Estat',t:'sel',o:()=>SEST.map(e=>[e,e])},{k:'data_sollicitud',l:'Data sol·licitud',t:'date'},{k:'import_sollicitat',l:'Import sol·licitat',t:'num'},
+  {k:'data_resolucio',l:'Data resolució',t:'date'},{k:'import_concedit',l:'Import concedit',t:'num'},{k:'termini_justificacio',l:'Termini de justificació',t:'date'},
+  {k:'observacions',l:'Observacions',t:'area',w:1}];
+const pillS=e=>`<span class="pill ${e==='Cobrada'?'ok':e==='Denegada'?'no':e==='Concedida'||e==='Justificada'?'wa':''}">${esc(e)}</span>`;
+function vSub(){
+  const Y=S.q.sy??perYear();
+  const L=S.sub.filter(x=>!Y||x.any_sub==Y);
+  const t=(f)=>L.reduce((a,x)=>a+f(x),0);
+  const anys=[...new Set([...S.sub.map(x=>x.any_sub),new Date().getFullYear()])].sort((a,b)=>b-a);
+  $('#m').innerHTML=`<div class="kpis">
+   <div class="card kpi"><div class="l">Sol·licitat</div><div class="v">${eur(t(x=>Number(x.import_sollicitat||0)))}</div></div>
+   <div class="card kpi"><div class="l">Concedit</div><div class="v">${eur(t(x=>x.estat==='Denegada'?0:Number(x.import_concedit||0)))}</div></div>
+   <div class="card kpi"><div class="l">Esperat (concedit o, si no hi ha resolució, sol·licitat)</div><div class="v">${eur(t(subEsperat))}</div></div>
+   <div class="card kpi"><div class="l">Cobrat</div><div class="v pos">${eur(t(subCobrat))}</div></div>
+   <div class="card kpi"><div class="l">Pendent de cobrar</div><div class="v neg">${eur(t(subPend))}</div></div></div>
+  <div class="bar"><select id="sy">${anys.map(a=>`<option ${a==Y?'selected':''}>${a}</option>`).join('')}<option value="0" ${Y==0?'selected':''}>Tots els anys</option></select>
+   <span class="sp"></span>${pot()?'<button class="b p" id="ns">+ Nova subvenció</button>':''}</div>
+  <div class="tw"><table><tr><th>Any</th><th>Ens</th><th>Convocatòria</th><th>Expedient</th><th>Estat</th><th class="n">Sol·licitat</th><th class="n">Concedit</th><th class="n">Cobrat</th><th class="n">Pendent</th><th>Justificar abans de</th></tr>
+  ${L.map(x=>`<tr class="cl" data-s="${x.id}"><td>${x.any_sub}</td><td>${esc(x.ens)}</td><td>${esc([x.codi,x.convocatoria].filter(Boolean).join(' · '))}</td><td class="nw">${esc(x.expedient)}</td><td>${pillS(x.estat)}</td>
+   <td class="n">${eur(x.import_sollicitat)}</td><td class="n">${eur(x.import_concedit)}</td><td class="n">${eur(subCobrat(x)||null)}</td><td class="n ${subPend(x)?'neg':''}">${eur(subPend(x))}</td><td class="nw">${fd(x.termini_justificacio)}</td></tr>`).join('')||'<tr><td colspan="10" class="mut">Cap subvenció registrada.</td></tr>'}</table></div>
+  <p class="mut" style="font-size:12px">Els cobraments es registren des de la pestanya Banc, vinculant l'ingrés a la subvenció (es permeten pagaments parcials o bestretes).</p>`;
+  $('#sy').onchange=e=>{S.q.sy=+e.target.value;vSub()};
+  if($('#ns'))$('#ns').onclick=()=>editRecord({title:'Nova subvenció',fields:SFIELDS,rec:{any_sub:perYear(),estat:'Sol·licitada',ens:ENS[0]},table:'subvencions'});
+  document.querySelectorAll('tr[data-s]').forEach(t=>t.onclick=()=>{if(!pot())return;const x=S.sub.find(y=>y.id===t.dataset.s);
+    const cob=S.conc.filter(c=>c.subvencio_id===x.id).map(c=>{const m=S.mov.find(y=>y.id===c.moviment_id);return `<div class="mut" style="font-size:12px">${fd(m?.data)} · ${esc(m?.concepte)} · ${eur(c.import)}</div>`}).join('');
+    editRecord({title:x.ens,fields:SFIELDS,rec:{...x},table:'subvencions',extra:`<h3>Cobraments vinculats</h3>${cob||'<span class="mut">Cap encara.</span>'}`});});
 }
 
 /* ---------- BANC ---------- */
@@ -286,26 +344,31 @@ function candidates(m){
   const txt=s=>{const n=norm(s);return words.filter(w=>n.includes(w)).length};
   let out=[];
   if(m.import>0){S.fact.forEach(f=>{if(usedF.has(f.id)||f.estat==='Anul·lada')return;const eq=cents(f.import)===cents(m.import);const t=txt(f.client);if(!eq&&!t)return;
-      out.push({tipus:'factura',id:f.id,eq,score:(eq?100:0)+t*15-Math.min(days(f.data),400)/10,label:`Factura ${f.num} · ${f.client}`,sub:`${fd(f.data)} · ${f.concepte||''}`,imp:f.import})});}
+      out.push({tipus:'factura',id:f.id,eq,score:(eq?100:0)+t*15-Math.min(days(f.data),400)/10,label:`Factura ${f.num} · ${f.client}`,sub:`${fd(f.data)} · ${f.concepte||''}`,imp:f.import})});
+    const C=norm(m.concepte);
+    S.sub.forEach(x=>{if(x.estat==='Denegada')return;const pend=subPend(x);if(pend<=0)return;const eq=cents(pend)===cents(m.import)||cents(subEsperat(x))===cents(m.import);
+      const ens=norm(x.ens);const t=(/GENERALITAT|CULTURA/.test(C)&&/GENERALITAT/.test(ens))||(/GIRONA/.test(C)&&/GIRONA/.test(ens)&&(/DIPUT/.test(C)===/DIPUT/.test(ens)))||(/SALT/.test(C.replace(/MARRECS DE SALT/g,''))&&/SALT/.test(ens))?1:0;
+      if(!eq&&!t)return;out.push({tipus:'subvencio',id:x.id,eq,parcial:!eq,score:(eq?100:0)+t*30,label:`Subvenció ${x.ens} ${x.any_sub}`,sub:`${x.codi||x.convocatoria||''} · pendent ${eur(pend)}`,imp:pend})});}
   else{S.desp.forEach(d=>{if(usedD.has(d.id))return;const eq=cents(d.total)===-cents(m.import);const t=txt(d.proveidor)+txt(d.persona);if(!eq&&!t)return;
       out.push({tipus:'despesa',id:d.id,eq,score:(eq?100:0)+t*15-Math.min(days(d.data_pagament||d.data),400)/10,label:`${d.proveidor||'—'} · ${d.persona||''}`,sub:`${fd(d.data)} · ${d.concepte||''}`,imp:-d.total})});}
   return out.sort((a,b)=>b.score-a.score);
 }
 function vBanc(){
   const q=S.q.b||'',fe=S.q.be??'pendent';
-  const M=S.mov.filter(m=>inAny(m.data)&&(!fe||m.estat===fe)&&(!q||norm(m.concepte+' '+(m.anotacio||'')).includes(norm(q))));
+  const qn=/^[-+]?[\d.,\s€]+$/.test(q.trim())?pnum(q.replace(/\s|€/g,'')):null;
+  const M=S.mov.filter(m=>inAny(m.data)&&(!fe||m.estat===fe)&&(!q||(qn!=null?(cents(Math.abs(m.import))===cents(Math.abs(qn))||String(Math.abs(m.import).toFixed(2)).replace('.',',').startsWith(q.trim().replace(/^[-+]/,'').replace(/\./g,''))):norm(m.concepte+' '+(m.anotacio||'')).includes(norm(q)))));
   const show=M.slice(0,400);
-  $('#m').innerHTML=`<div class="bar"><input id="qb" placeholder="Cerca concepte o anotació…" value="${esc(q)}" style="min-width:240px">
+  $('#m').innerHTML=`<div class="bar"><input id="qb" placeholder="Cerca concepte, anotació o import…" value="${esc(q)}" style="min-width:240px">
   <select id="be">${[['pendent','Pendents'],['conciliat','Conciliats'],['ignorat','Ignorats'],['','Tots']].map(([v,l])=>`<option value="${v}" ${fe===v?'selected':''}>${l}</option>`).join('')}</select>
   <span class="mut">${M.length} moviments${M.length>400?' (es mostren 400)':''}</span><span class="sp"></span>
   ${pot()?`<label class="b" style="cursor:pointer">⬆ Importa extracte (.xlsx, .xls, .csv)<input type="file" id="ext" accept=".xlsx,.xls,.csv,.txt" hidden></label>
   <button class="b" id="auto">Concilia automàticament</button>`:''}</div>
   <div class="tw"><table><tr><th>Data</th><th>Concepte</th><th class="n">Import</th><th class="n">Saldo</th><th>Anotació / vinculat a</th><th>Suggeriment</th></tr>
-  ${show.map(m=>{const c=concOf(m);const link=c.map(x=>{if(x.factura_id){const f=S.fact.find(y=>y.id===x.factura_id);return `🧾 ${esc(f?.num)} ${esc(f?.client)}`}const d=S.desp.find(y=>y.id===x.despesa_id);return `📄 ${esc(d?.proveidor)} (${fd(d?.data)})`}).join('<br>');
+  ${show.map(m=>{const c=concOf(m);const link=c.map(x=>{if(x.subvencio_id){const v=S.sub.find(y=>y.id===x.subvencio_id);return `🏛 ${esc(v?.ens)} ${v?.any_sub||''}`}if(x.factura_id){const f=S.fact.find(y=>y.id===x.factura_id);return `🧾 ${esc(f?.num)} ${esc(f?.client)}`}const d=S.desp.find(y=>y.id===x.despesa_id);return `📄 ${esc(d?.proveidor)} (${fd(d?.data)})`}).join('<br>');
     const best=m.estat==='pendent'?candidates(m).find(x=>x.eq):null;
     return `<tr class="cl" data-m="${m.id}"><td class="nw">${fd(m.data)}</td><td>${esc(m.concepte)}</td><td class="n ${m.import<0?'neg':'pos'}">${eur(m.import)}</td><td class="n mut">${eur(m.saldo)}</td>
     <td style="font-size:12px">${m.estat==='ignorat'?'<span class="pill">Ignorat</span> ':''}${link}${m.anotacio?`<div class="mut">${esc(m.anotacio)}</div>`:''}${m.clt_codi?`<div class="mut">${esc(m.clt_codi)} · ${esc(catNom(m.categoria_id))}</div>`:''}</td>
-    <td>${best&&pot()?`<div class="sug"><span>${esc(best.label)}</span><button class="b sm p" data-ok="${m.id}">✓</button></div>`:''}</td></tr>`}).join('')}</table></div>`;
+    <td>${best&&pot()?`<div class="sug"><span>${esc(best.label)} · <b>${eur(best.imp)}</b> ${cents(Math.abs(best.imp))===cents(Math.abs(m.import))?'<span class="pos" title="Import idèntic">✓</span>':''}</span><button class="b sm p" data-ok="${m.id}">✓</button></div>`:''}</td></tr>`}).join('')}</table></div>`;
   $('#qb').oninput=e=>{S.q.b=e.target.value;const p=e.target.selectionStart;vBanc();$('#qb').focus();$('#qb').setSelectionRange(p,p)};
   $('#be').onchange=e=>{S.q.be=e.target.value;vBanc()};
   if($('#ext'))$('#ext').onchange=e=>importExtracte(e.target.files[0]);
@@ -320,6 +383,8 @@ async function conciliar(m,c){
   const upd={estat:'conciliat'};
   if(c.tipus==='factura'){const f=S.fact.find(x=>x.id===c.id);upd.clt_codi=f.clt_codi;
     if(f.estat!=='Cobrada'){r=await sb.from('factures_emeses').update({estat:'Cobrada',data_cobrament:m.data}).eq('id',f.id);if(r.error)throw r.error;}}
+  else if(c.tipus==='subvencio'){const x=S.sub.find(y=>y.id===c.id);upd.clt_codi=/CLT027|Cultura/i.test((x.codi||'')+x.ens)?'I.1':'I.5';
+    if(cents(subCobrat(x)+Number(m.import))>=cents(subEsperat(x))&&x.estat!=='Cobrada'){r=await sb.from('subvencions').update({estat:'Cobrada'}).eq('id',x.id);if(r.error)throw r.error;}}
   else{const d=S.desp.find(x=>x.id===c.id);upd.clt_codi=d.clt_codi;upd.categoria_id=d.categoria_id;
     if(!d.pagada||!d.data_pagament){r=await sb.from('despeses').update({pagada:true,data_pagament:d.data_pagament||m.data,mitja_pagament:d.mitja_pagament||(/RECIBO|ADEUDO/.test(norm(m.concepte))?'Domiciliació':/TARJETA|COMPRA/.test(norm(m.concepte))?'Targeta':'Transferència')}).eq('id',d.id);if(r.error)throw r.error;}}
   r=await sb.from('moviments').update(upd).eq('id',m.id);if(r.error)throw r.error;
@@ -335,7 +400,7 @@ async function autoConc(){
 }
 function movDlg(m){
   const c=concOf(m);const cand=candidates(m).slice(0,8);
-  const linked=c.map(x=>{const lab=x.factura_id?(()=>{const f=S.fact.find(y=>y.id===x.factura_id);return `Factura ${f?.num} · ${f?.client}`})():(()=>{const d=S.desp.find(y=>y.id===x.despesa_id);return `${d?.proveidor} · ${d?.concepte}`})();
+  const linked=c.map(x=>{const lab=x.subvencio_id?(()=>{const v=S.sub.find(y=>y.id===x.subvencio_id);return `Subvenció ${v?.ens} ${v?.any_sub}`})():x.factura_id?(()=>{const f=S.fact.find(y=>y.id===x.factura_id);return `Factura ${f?.num} · ${f?.client}`})():(()=>{const d=S.desp.find(y=>y.id===x.despesa_id);return `${d?.proveidor} · ${d?.concepte}`})();
     return `<div class="cand"><span>${esc(lab)}</span>${pot()?`<button class="b sm" data-un="${x.id}">Desvincula</button>`:''}</div>`}).join('');
   const body=`<p><b>${fd(m.data)}</b> · ${esc(m.concepte)} · <b class="${m.import<0?'neg':'pos'}">${eur(m.import)}</b></p>
   ${linked?`<h3>Vinculat a</h3>${linked}`:''}
