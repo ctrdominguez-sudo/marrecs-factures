@@ -1,0 +1,393 @@
+<!doctype html>
+<html lang="ca">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tresoreria Marrecs</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root{--bg:#f6f7f8;--card:#fff;--ink:#1d2329;--mut:#69737d;--line:#e2e5e9;--acc:#0b6e69;--acc2:#e6f2f1;--neg:#b42318;--pos:#067647;--warn:#b54708;--warnbg:#fef0c7}
+@media (prefers-color-scheme:dark){:root{--bg:#121518;--card:#1b1f23;--ink:#e7eaee;--mut:#98a2ad;--line:#2c3238;--acc:#3fb8af;--acc2:#16302e;--neg:#f97066;--pos:#47cd89;--warn:#fdb022;--warnbg:#3a2a0a}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+header{display:flex;align-items:center;gap:16px;padding:10px 20px;background:var(--card);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:5;flex-wrap:wrap}
+header h1{font-size:16px;margin:0;font-weight:650}
+nav{display:flex;gap:4px;flex-wrap:wrap}
+nav button{border:0;background:none;padding:7px 12px;border-radius:7px;color:var(--mut);font:inherit;cursor:pointer}
+nav button.on{background:var(--acc2);color:var(--acc);font-weight:600}
+.sp{flex:1}
+main{padding:18px 20px;max-width:1400px;margin:0 auto}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin-bottom:16px}
+.kpi .l{color:var(--mut);font-size:12px}.kpi .v{font-size:20px;font-weight:650;font-variant-numeric:tabular-nums}
+.bar{display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap}
+input,select,textarea{font:inherit;color:var(--ink);background:var(--card);border:1px solid var(--line);border-radius:7px;padding:6px 9px}
+textarea{width:100%;min-height:60px}
+button.b{font:inherit;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:7px;padding:6px 12px;cursor:pointer}
+button.p{background:var(--acc);border-color:var(--acc);color:#fff}
+button.sm{padding:2px 8px;font-size:12px}
+.tw{overflow:auto;border:1px solid var(--line);border-radius:10px;background:var(--card);max-height:calc(100vh - 190px)}
+table{border-collapse:collapse;width:100%}
+th,td{padding:7px 9px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+th{position:sticky;top:0;background:var(--card);font-size:12px;color:var(--mut);font-weight:600;z-index:1;white-space:nowrap}
+tr.cl{cursor:pointer}tr.cl:hover td{background:var(--acc2)}
+.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.neg{color:var(--neg)}.pos{color:var(--pos)}.mut{color:var(--mut)}.nw{white-space:nowrap}
+.pill{display:inline-block;padding:1px 8px;border-radius:99px;font-size:12px;background:var(--line);white-space:nowrap}
+.pill.ok{background:#dcfae6;color:#067647}.pill.wa{background:var(--warnbg);color:var(--warn)}.pill.no{background:#fee4e2;color:#b42318}
+@media (prefers-color-scheme:dark){.pill.ok{background:#0f3b24;color:#75e0a7}.pill.no{background:#4a1612;color:#fda29b}}
+.sug{font-size:12px;background:var(--acc2);border-radius:7px;padding:4px 7px;display:flex;gap:6px;align-items:center;justify-content:space-between}
+dialog{border:1px solid var(--line);border-radius:12px;background:var(--card);color:var(--ink);padding:0;width:min(720px,94vw);max-height:90vh}
+dialog::backdrop{background:#0006}
+.dh{padding:12px 16px;border-bottom:1px solid var(--line);font-weight:600;display:flex;justify-content:space-between}
+.db{padding:14px 16px;overflow:auto;max-height:calc(90vh - 120px)}
+.df{padding:10px 16px;border-top:1px solid var(--line);display:flex;gap:8px;justify-content:flex-end}
+.fg{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px}
+.fg label{display:flex;flex-direction:column;font-size:12px;color:var(--mut);gap:3px}
+.fg label.w{grid-column:1/-1}
+.fg input,.fg select{width:100%}
+.diff td{font-size:13px}.diff .old{color:var(--neg);text-decoration:line-through}.diff .new{color:var(--pos)}
+.files{display:flex;gap:10px;flex-wrap:wrap;margin-top:8px}
+.files a{display:flex;flex-direction:column;align-items:center;gap:4px;width:120px;font-size:11px;color:var(--ink);text-decoration:none;border:1px solid var(--line);border-radius:8px;padding:6px;word-break:break-all}
+.files img{width:100%;height:90px;object-fit:cover;border-radius:5px}
+.files .doc{height:90px;display:flex;align-items:center;justify-content:center;font-size:28px}
+#login{max-width:360px;margin:12vh auto}
+#login h2{margin-top:0}
+#login input{width:100%;margin-bottom:8px}
+.msg{padding:8px 10px;border-radius:7px;background:var(--warnbg);color:var(--warn);margin:8px 0;font-size:13px}
+.toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:9px 16px;border-radius:8px;z-index:50}
+.cand{border:1px solid var(--line);border-radius:8px;padding:8px;margin-bottom:6px;display:flex;justify-content:space-between;gap:10px;align-items:center}
+h3{font-size:14px;margin:18px 0 8px}
+@media (max-width:640px){main{padding:12px}header{padding:8px 12px}}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<dialog id="dlg"><div class="dh"><span id="dt"></span><button class="b sm" onclick="dlg.close()">✕</button></div><div class="db" id="dbody"></div><div class="df" id="dfoot"></div></dialog>
+<script>
+const SB_URL='https://wnnenblbouzlcpsiaxxc.supabase.co';
+const SB_KEY='sb_publishable_4AChtQfOPEeQnwyf1x2dhQ_xhQeqn5-';
+const sb=supabase.createClient(SB_URL,SB_KEY);
+const $=s=>document.querySelector(s);
+const esc=v=>v==null?'':String(v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const eur=v=>v==null||v===''?'':Number(v).toLocaleString('ca-ES',{minimumFractionDigits:2,maximumFractionDigits:2})+' €';
+const fd=d=>d?d.split('-').reverse().join('/'):'';
+const cents=v=>Math.round(Number(v)*100);
+const norm=s=>String(s||'').toUpperCase().trim().replace(/\s+/g,' ');
+function toast(t){const e=document.createElement('div');e.className='toast';e.textContent=t;document.body.appendChild(e);setTimeout(()=>e.remove(),2600)}
+function fail(e){console.error(e);alert('Error: '+(e.message||e));}
+
+const S={user:null,membre:null,tab:'resum',any:new Date().getFullYear(),fact:[],desp:[],mov:[],conc:[],cats:[],clt:[],q:{}};
+const pot=()=>S.membre&&['admin','editor'].includes(S.membre.rol);
+
+/* ---------- AUTH ---------- */
+async function boot(){
+  const {data:{session}}=await sb.auth.getSession();
+  sb.auth.onAuthStateChange((ev,s)=>{
+    if(ev==='PASSWORD_RECOVERY'){const p=prompt('Nova contrasenya (mín. 8 caràcters):');if(p)sb.auth.updateUser({password:p}).then(r=>r.error?fail(r.error):toast('Contrasenya canviada'));}
+    if(ev==='SIGNED_IN'&&!S.user){S.user=s.user;start();}
+    if(ev==='SIGNED_OUT'){S.user=null;login();}
+  });
+  if(session){S.user=session.user;start();}else login();
+}
+function login(msg){
+  $('#app').innerHTML=`<div id="login" class="card"><h2>Tresoreria Marrecs</h2>
+  <input id="le" type="email" placeholder="correu@exemple.cat" autocomplete="email">
+  <input id="lp" type="password" placeholder="Contrasenya" autocomplete="current-password">
+  ${msg?`<div class="msg">${esc(msg)}</div>`:''}
+  <div class="bar"><button class="b p" id="bin">Entrar</button><button class="b" id="bup">Crear compte</button><span class="sp"></span><a href="#" id="bfo" class="mut">He oblidat la contrasenya</a></div>
+  <p class="mut" style="font-size:12px">Només hi tenen accés els membres autoritzats de la junta.</p></div>`;
+  const em=()=>$('#le').value.trim(),pw=()=>$('#lp').value;
+  $('#bin').onclick=async()=>{const {error}=await sb.auth.signInWithPassword({email:em(),password:pw()});if(error)login(error.message==='Invalid login credentials'?'Correu o contrasenya incorrectes.':error.message);};
+  $('#lp').onkeydown=e=>{if(e.key==='Enter')$('#bin').click()};
+  $('#bup').onclick=async()=>{if(pw().length<8)return login('La contrasenya ha de tenir almenys 8 caràcters.');const {error}=await sb.auth.signUp({email:em(),password:pw(),options:{emailRedirectTo:location.origin+location.pathname}});login(error?error.message:'T\'hem enviat un correu per confirmar el compte. Un cop confirmat, entra aquí.');};
+  $('#bfo').onclick=async e=>{e.preventDefault();if(!em())return login('Escriu el teu correu primer.');const {error}=await sb.auth.resetPasswordForEmail(em(),{redirectTo:location.origin+location.pathname});login(error?error.message:'T\'hem enviat un enllaç per canviar la contrasenya.');};
+}
+async function start(){
+  const {data,error}=await sb.from('membres').select('*').eq('email',S.user.email.toLowerCase()).maybeSingle();
+  if(error||!data){await sb.auth.signOut();S.user=null;return login('Aquest compte ('+S.user?.email+') no està autoritzat. Demana a tresoreria que t\'afegeixi.');}
+  S.membre=data;await loadAll();render();
+}
+
+/* ---------- DATA ---------- */
+async function all(q){let out=[],from=0;for(;;){const {data,error}=await q().range(from,from+999);if(error)throw error;out=out.concat(data);if(data.length<1000)break;from+=1000;}return out;}
+async function loadAll(){
+  try{
+    const [f,d,m,c,cats,clt]=await Promise.all([
+      all(()=>sb.from('factures_emeses').select('*').order('num')),
+      all(()=>sb.from('despeses').select('*,despesa_fitxers(count)').order('data',{ascending:false})),
+      all(()=>sb.from('moviments').select('*').order('data',{ascending:false}).order('saldo',{ascending:true})),
+      all(()=>sb.from('conciliacions').select('*')),
+      all(()=>sb.from('categories').select('*').order('nom')),
+      all(()=>sb.from('categories_clt').select('*').order('ordre'))]);
+    Object.assign(S,{fact:f,desp:d,mov:m,conc:c,cats,clt});
+  }catch(e){fail(e)}
+}
+const catNom=id=>S.cats.find(c=>c.id===id)?.nom||'';
+const cltNom=c=>S.clt.find(x=>x.codi===c)?.nom||'';
+const yr=d=>d?+d.slice(0,4):null;
+
+/* ---------- LAYOUT ---------- */
+const TABS={resum:'Resum',factures:'Factures emeses',despeses:'Despeses',banc:'Banc'};
+function render(){
+  const anys=[...new Set([...S.fact.map(x=>yr(x.data)),...S.desp.map(x=>yr(x.data)),...S.mov.map(x=>yr(x.data)),new Date().getFullYear()].filter(Boolean))].sort((a,b)=>b-a);
+  $('#app').innerHTML=`<header><h1>Tresoreria Marrecs</h1><nav>${Object.entries(TABS).map(([k,v])=>`<button data-t="${k}" class="${S.tab===k?'on':''}">${v}</button>`).join('')}</nav><span class="sp"></span>
+  <select id="any">${anys.map(a=>`<option ${a==S.any?'selected':''}>${a}</option>`).join('')}<option value="0" ${S.any==0?'selected':''}>Tots</option></select>
+  <span class="mut" style="font-size:12px">${esc(S.membre.nom||S.user.email)} · ${S.membre.rol}</span><button class="b sm" id="out">Sortir</button></header><main id="m"></main>`;
+  document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{S.tab=b.dataset.t;render()});
+  $('#any').onchange=e=>{S.any=+e.target.value;render()};
+  $('#out').onclick=()=>sb.auth.signOut();
+  ({resum:vResum,factures:vFact,despeses:vDesp,banc:vBanc})[S.tab]();
+}
+const inAny=d=>!S.any||yr(d)===S.any;
+
+/* ---------- GENERIC EDIT DIALOG (edit → confirm) ---------- */
+function openDlg(title,body,foot){$('#dt').textContent=title;$('#dbody').innerHTML=body;$('#dfoot').innerHTML='';foot.forEach(b=>{const e=document.createElement('button');e.className='b'+(b.p?' p':'');e.textContent=b.t;e.onclick=b.f;$('#dfoot').appendChild(e)});if(!dlg.open)dlg.showModal();}
+function fieldHtml(f,v){
+  const id='f_'+f.k;let inp;
+  if(f.t==='sel')inp=`<select id="${id}">${f.o().map(([val,l])=>`<option value="${esc(val)}" ${String(v??'')===String(val)?'selected':''}>${esc(l)}</option>`).join('')}</select>`;
+  else if(f.t==='bool')inp=`<select id="${id}"><option value="true" ${v?'selected':''}>Sí</option><option value="false" ${!v?'selected':''}>No</option></select>`;
+  else if(f.t==='area')inp=`<textarea id="${id}">${esc(v)}</textarea>`;
+  else inp=`<input id="${id}" type="${f.t==='num'?'number':f.t==='date'?'date':'text'}" ${f.t==='num'?'step="0.01"':''} value="${esc(v)}">`;
+  return `<label class="${f.w?'w':''}">${esc(f.l)}${inp}</label>`;
+}
+function readField(f){const e=$('#f_'+f.k);let v=e.value;if(f.t==='num')return v===''?null:Number(v);if(f.t==='bool')return v==='true';if(f.t==='sel'&&f.int)return v===''?null:Number(v);return v===''?null:v;}
+function showVal(f,v){if(f.t==='num')return eur(v);if(f.t==='bool')return v?'Sí':'No';if(f.t==='date')return fd(v);if(f.t==='sel'){const o=f.o().find(([x])=>String(x)===String(v??''));return o?o[1]:v}return v??'';}
+function editRecord({title,fields,rec,table,extra='',after,onSaved}){
+  const isNew=!rec.id;
+  const form=()=>openDlg(title,`<div class="fg">${fields.map(f=>fieldHtml(f,rec[f.k])).join('')}</div>${extra}`,[
+    ...(!isNew&&S.membre.rol==='admin'?[{t:'Esborra',f:()=>del()}]:[]),{t:'Cancel·la',f:()=>dlg.close()},{t:'Revisa canvis →',p:1,f:review}]);
+  let changes={};
+  function review(){
+    changes={};fields.forEach(f=>{const nv=readField(f);const ov=rec[f.k]??null;if(String(nv??'')!==String(ov??''))changes[f.k]=nv;});
+    if(!Object.keys(changes).length){toast('No hi ha canvis');return;}
+    const rows=Object.keys(changes).map(k=>{const f=fields.find(x=>x.k===k);return `<tr><td>${esc(f.l)}</td><td class="old">${esc(showVal(f,rec[k]))}</td><td class="new">${esc(showVal(f,changes[k]))}</td></tr>`}).join('');
+    openDlg('Confirma els canvis',`<table class="diff"><tr><th>Camp</th><th>Abans</th><th>Després</th></tr>${rows}</table>`,[{t:'← Torna',f:()=>{Object.assign(rec,{...rec});formKeep()}},{t:'Desa',p:1,f:save}]);
+  }
+  let snapshot=null;function formKeep(){form();Object.entries(changes).forEach(([k,v])=>{const e=$('#f_'+k);if(e)e.value=v==null?'':v;});}
+  async function save(){
+    if(after)after(changes,rec);
+    const q=isNew?sb.from(table).insert(changes).select().single():sb.from(table).update(changes).eq('id',rec.id).select().single();
+    const {data,error}=await q;if(error)return fail(error);
+    dlg.close();toast('Desat');await loadAll();render();onSaved&&onSaved(data);
+  }
+  async function del(){if(!confirm('Segur que vols esborrar aquest registre? No es pot desfer.'))return;const {error}=await sb.from(table).delete().eq('id',rec.id);if(error)return fail(error);dlg.close();toast('Esborrat');await loadAll();render();}
+  form();
+}
+
+/* ---------- RESUM ---------- */
+function vResum(){
+  const F=S.fact.filter(f=>inAny(f.data)&&f.estat!=='Anul·lada'),D=S.desp.filter(d=>inAny(d.data)),M=S.mov.filter(m=>inAny(m.data));
+  const sum=(a,f)=>a.reduce((s,x)=>s+Number(f(x)||0),0);
+  const emes=sum(F,f=>f.import),cobrat=sum(F.filter(f=>f.estat==='Cobrada'),f=>f.import);
+  const desp=sum(D,d=>d.total),nopag=sum(D.filter(d=>!d.pagada),d=>d.total);
+  const saldo=S.mov[0]?.saldo;const pend=M.filter(m=>m.estat==='pendent').length;
+  const byClt={};D.forEach(d=>{const k=d.clt_codi||'—';(byClt[k]=byClt[k]||{n:0,t:0,b:0});byClt[k].n++;byClt[k].t+=Number(d.total||0);byClt[k].b+=Number(d.base??d.total??0)});
+  const rows=S.clt.filter(c=>c.tipus==='despesa').map(c=>{const r=byClt[c.codi];if(!r)return'';const over=c.maxim&&r.t>c.maxim;
+    return `<tr class="cl" data-c="${c.codi}"><td class="nw">${c.codi}</td><td>${esc(c.nom)}</td><td>${c.subvencionable?'Sí':'<span class="mut">No</span>'}</td><td class="n">${r.n}</td><td class="n">${eur(r.b)}</td><td class="n">${eur(r.t)}</td><td class="n ${over?'neg':''}">${c.maxim?eur(c.maxim):''}</td></tr>`}).join('');
+  const sense=byClt['—'];
+  const sub=sum(D.filter(d=>S.clt.find(c=>c.codi===d.clt_codi)?.subvencionable),d=>d.total);
+  $('#m').innerHTML=`<div class="kpis">
+  <div class="card kpi"><div class="l">Saldo bancari (últim moviment)</div><div class="v">${eur(saldo)}</div><div class="mut" style="font-size:12px">${S.mov[0]?fd(S.mov[0].data):'Sense extracte'}</div></div>
+  <div class="card kpi"><div class="l">Facturat ${S.any||''}</div><div class="v">${eur(emes)}</div></div>
+  <div class="card kpi"><div class="l">Pendent de cobrar</div><div class="v ${emes-cobrat>0?'neg':''}">${eur(emes-cobrat)}</div></div>
+  <div class="card kpi"><div class="l">Despeses ${S.any||''}</div><div class="v">${eur(desp)}</div><div class="mut" style="font-size:12px">${eur(sub)} subvencionables</div></div>
+  <div class="card kpi"><div class="l">Despeses no pagades</div><div class="v ${nopag?'neg':''}">${eur(nopag)}</div></div>
+  <div class="card kpi"><div class="l">Moviments per conciliar</div><div class="v">${pend}</div></div></div>
+  <h3>Despeses per partida CLT027</h3>
+  <div class="tw"><table><tr><th>Codi</th><th>Partida</th><th>Subv.</th><th class="n">Núm.</th><th class="n">Base</th><th class="n">Total</th><th class="n">Màxim</th></tr>${rows}
+  ${sense?`<tr><td>—</td><td class="neg">Sense partida assignada</td><td></td><td class="n">${sense.n}</td><td class="n">${eur(sense.b)}</td><td class="n">${eur(sense.t)}</td><td></td></tr>`:''}</table></div>
+  <h3>Factures pendents de cobrar</h3>
+  <div class="tw">${factTable(F.filter(f=>f.estat!=='Cobrada'))}</div>`;
+  document.querySelectorAll('tr[data-c]').forEach(t=>t.onclick=()=>{S.tab='despeses';S.q.clt=t.dataset.c;render()});
+  bindFact();
+}
+
+/* ---------- FACTURES ---------- */
+const FEST=['Emesa','Enviada','Cobrada','Anul·lada'];
+const pillE=e=>`<span class="pill ${e==='Cobrada'?'ok':e==='Anul·lada'?'no':e==='Enviada'?'wa':''}">${esc(e)}</span>`;
+function factTable(F){
+  return `<table><tr><th>Núm.</th><th>Data</th><th>Client</th><th>Concepte</th><th class="n">Import</th><th>Estat</th><th>Enviada</th><th>Cobrada</th><th>Observacions</th></tr>
+  ${F.map(f=>`<tr class="cl" data-f="${f.id}"><td class="nw">${esc(f.num)}</td><td class="nw">${fd(f.data)}</td><td>${esc(f.client)}</td><td>${esc(f.concepte)}</td><td class="n">${eur(f.import)}</td><td>${pillE(f.estat)}</td><td class="nw">${fd(f.data_enviament)}</td><td class="nw">${fd(f.data_cobrament)}</td><td class="mut" style="font-size:12px;max-width:280px">${esc(f.observacions)}</td></tr>`).join('')}</table>`;
+}
+const FFIELDS=[{k:'num',l:'Número'},{k:'data',l:'Data',t:'date'},{k:'client',l:'Client'},{k:'nif_client',l:'NIF client'},{k:'concepte',l:'Concepte',w:1},{k:'import',l:'Import (€)',t:'num'},
+  {k:'estat',l:'Estat',t:'sel',o:()=>FEST.map(e=>[e,e])},{k:'canal',l:'Canal d\'enviament',t:'sel',o:()=>[['',''],['e.FACT','e.FACT'],['FACe','FACe'],['Correu','Correu'],['Altres','Altres']]},
+  {k:'data_enviament',l:'Data enviament',t:'date'},{k:'data_cobrament',l:'Data cobrament',t:'date'},
+  {k:'clt_codi',l:'Partida d\'ingrés',t:'sel',o:()=>[['',''],...S.clt.filter(c=>c.tipus==='ingres').map(c=>[c.codi,c.codi+' '+c.nom])]},{k:'observacions',l:'Observacions',t:'area',w:1}];
+function bindFact(){document.querySelectorAll('tr[data-f]').forEach(t=>t.onclick=()=>{const f=S.fact.find(x=>x.id===t.dataset.f);if(!pot())return;editRecord({title:'Factura '+f.num,fields:FFIELDS,rec:{...f},table:'factures_emeses'})});}
+function vFact(){
+  const q=S.q.f||'';const F=S.fact.filter(f=>inAny(f.data)&&(!q||norm(Object.values(f).join(' ')).includes(norm(q)))&&(!S.q.fe||f.estat===S.q.fe));
+  const tot=F.reduce((s,f)=>s+(f.estat==='Anul·lada'?0:Number(f.import)),0);
+  $('#m').innerHTML=`<div class="bar"><input id="qf" placeholder="Cerca…" value="${esc(q)}"><select id="fe"><option value="">Tots els estats</option>${FEST.map(e=>`<option ${S.q.fe===e?'selected':''}>${e}</option>`).join('')}</select>
+  <span class="mut">${F.length} factures · ${eur(tot)}</span><span class="sp"></span>${pot()?'<button class="b p" id="nf">+ Nova factura</button>':''}</div><div class="tw">${factTable(F)}</div>`;
+  $('#qf').oninput=e=>{S.q.f=e.target.value;const p=e.target.selectionStart;vFact();$('#qf').focus();$('#qf').setSelectionRange(p,p)};
+  $('#fe').onchange=e=>{S.q.fe=e.target.value;vFact()};
+  if($('#nf'))$('#nf').onclick=()=>{const y=new Date().getFullYear()%100;const nums=S.fact.map(f=>f.num).filter(n=>n.startsWith('A'+y+'-')).map(n=>+n.split('-')[1]).sort((a,b)=>b-a);
+    editRecord({title:'Nova factura',fields:FFIELDS,rec:{num:`A${y}-${String((nums[0]||0)+1).padStart(3,'0')}`,data:new Date().toISOString().slice(0,10),estat:'Emesa',clt_codi:'I.3'},table:'factures_emeses'})};
+  bindFact();
+}
+
+/* ---------- DESPESES ---------- */
+const DFIELDS=[{k:'data',l:'Data',t:'date'},{k:'proveidor',l:'Proveïdor'},{k:'nif_proveidor',l:'NIF proveïdor'},{k:'num_factura',l:'Núm. factura'},{k:'concepte',l:'Concepte',w:1},
+  {k:'base',l:'Base',t:'num'},{k:'iva_pct',l:'% IVA'},{k:'iva',l:'IVA',t:'num'},{k:'irpf',l:'IRPF',t:'num'},{k:'total',l:'Total',t:'num'},
+  {k:'categoria_id',l:'Categoria',t:'sel',int:1,o:()=>[['',''],...S.cats.filter(c=>c.tipus==='despesa'&&c.actiu).map(c=>[c.id,c.nom])]},
+  {k:'clt_codi',l:'Partida CLT027',t:'sel',o:()=>[['','(automàtica)'],...S.clt.filter(c=>c.tipus==='despesa').map(c=>[c.codi,c.codi+' '+c.nom])]},
+  {k:'persona',l:'Persona'},{k:'iban_reemborsament',l:'IBAN reemborsament'},{k:'pagada',l:'Pagada',t:'bool'},{k:'data_pagament',l:'Data pagament',t:'date'},
+  {k:'mitja_pagament',l:'Mitjà de pagament',t:'sel',o:()=>[['',''],['Transferència','Transferència'],['Domiciliació','Domiciliació'],['Targeta','Targeta'],['Efectiu','Efectiu'],['Bizum','Bizum']]},
+  {k:'comptabilitzada',l:'Comptabilitzada',t:'bool'},{k:'comentaris',l:'Comentaris',t:'area',w:1}];
+function vDesp(){
+  const q=S.q.d||'';
+  const D=S.desp.filter(d=>inAny(d.data)&&(!q||norm([d.concepte,d.proveidor,d.persona,d.num_factura,d.comentaris,catNom(d.categoria_id)].join(' ')).includes(norm(q)))
+    &&(!S.q.clt||d.clt_codi===S.q.clt)&&(!S.q.cat||String(d.categoria_id)===S.q.cat)&&(S.q.pg==null||S.q.pg===''||String(d.pagada)===S.q.pg));
+  const tot=D.reduce((s,d)=>s+Number(d.total||0),0);
+  $('#m').innerHTML=`<div class="bar"><input id="qd" placeholder="Cerca proveïdor, concepte, persona…" value="${esc(q)}" style="min-width:240px">
+  <select id="dc"><option value="">Totes les categories</option>${S.cats.filter(c=>c.tipus==='despesa').map(c=>`<option value="${c.id}" ${S.q.cat==c.id?'selected':''}>${esc(c.nom)}</option>`).join('')}</select>
+  <select id="dl"><option value="">Totes les partides</option>${S.clt.filter(c=>c.tipus==='despesa').map(c=>`<option value="${c.codi}" ${S.q.clt===c.codi?'selected':''}>${c.codi} ${esc(c.nom)}</option>`).join('')}</select>
+  <select id="dp"><option value="">Pagades i no</option><option value="false" ${S.q.pg==='false'?'selected':''}>No pagades</option><option value="true" ${S.q.pg==='true'?'selected':''}>Pagades</option></select>
+  <span class="mut">${D.length} · ${eur(tot)}</span><span class="sp"></span>${pot()?'<button class="b p" id="nd">+ Nova despesa</button>':''}</div>
+  <div class="tw"><table><tr><th>Data</th><th>Proveïdor</th><th>Concepte</th><th class="n">Total</th><th>Categoria</th><th>Partida</th><th>Persona</th><th>Pagada</th><th>📎</th></tr>
+  ${D.map(d=>`<tr class="cl" data-d="${d.id}"><td class="nw">${fd(d.data)}</td><td>${esc(d.proveidor)}</td><td>${esc(d.concepte)}</td><td class="n">${eur(d.total)}</td><td>${esc(catNom(d.categoria_id))}</td>
+  <td class="nw" title="${esc(cltNom(d.clt_codi))}">${esc(d.clt_codi||'—')}${d.clt_manual?' ✎':''}</td><td>${esc(d.persona)}</td><td>${d.pagada?'<span class="pill ok">Sí</span>':'<span class="pill wa">No</span>'}</td><td>${d.despesa_fitxers?.[0]?.count||(d.fitxer_original?'<span class="mut" title="Fitxer encara a Drive">·</span>':'')}</td></tr>`).join('')}</table></div>`;
+  $('#qd').oninput=e=>{S.q.d=e.target.value;const p=e.target.selectionStart;vDesp();$('#qd').focus();$('#qd').setSelectionRange(p,p)};
+  $('#dc').onchange=e=>{S.q.cat=e.target.value;vDesp()};$('#dl').onchange=e=>{S.q.clt=e.target.value;vDesp()};$('#dp').onchange=e=>{S.q.pg=e.target.value;vDesp()};
+  if($('#nd'))$('#nd').onclick=()=>despDlg({data:new Date().toISOString().slice(0,10),pagada:false,comptabilitzada:false,origen:'manual',iva_pct:'21'});
+  document.querySelectorAll('tr[data-d]').forEach(t=>t.onclick=()=>despDlg({...S.desp.find(x=>x.id===t.dataset.d)}));
+}
+async function despDlg(d){
+  delete d.despesa_fitxers;
+  let files=[];
+  if(d.id){const {data}=await sb.from('despesa_fitxers').select('*').eq('despesa_id',d.id);files=data||[];
+    const signed=await Promise.all(files.map(f=>sb.storage.from('documents').createSignedUrl(f.path,3600)));signed.forEach((s,i)=>files[i].url=s.data?.signedUrl);}
+  const fhtml=`<h3>Documents</h3><div class="files">${files.map(f=>`<a href="${esc(f.url)}" target="_blank" rel="noopener">${/^image\//.test(f.mime||'')?`<img src="${esc(f.url)}" alt="">`:'<div class="doc">📄</div>'}${esc(f.nom||f.path.split('/').pop())}</a>`).join('')||'<span class="mut">Cap document adjunt.</span>'}</div>
+   ${d.fitxer_original&&!files.length?`<p class="mut" style="font-size:12px">Fitxer original (encara a Drive): ${esc(d.fitxer_original)}</p>`:''}
+   ${d.id&&pot()?`<div class="bar" style="margin-top:8px"><input type="file" id="up" multiple accept="image/*,application/pdf"><button class="b sm" id="bup2">Puja</button></div>`:''}
+   ${d.id?`<p class="mut" style="font-size:12px">Origen: ${esc(d.origen)}${d.clt_manual?' · partida fixada manualment':''}</p>`:''}`;
+  if(!pot()){openDlg('Despesa',`<div class="fg">${DFIELDS.map(f=>`<label class="${f.w?'w':''}">${esc(f.l)}<b style="color:var(--ink)">${esc(showVal(f,d[f.k]))}</b></label>`).join('')}</div>${fhtml}`,[{t:'Tanca',f:()=>dlg.close()}]);return;}
+  editRecord({title:d.id?'Despesa':'Nova despesa',fields:DFIELDS,rec:d,table:'despeses',extra:fhtml,
+    after:(ch,rec)=>{if('clt_codi' in ch)ch.clt_manual=!!ch.clt_codi;if(!rec.id)ch.origen='manual';}});
+  const b=$('#bup2');if(b)b.onclick=()=>uploadFiles(d.id,$('#up').files);
+}
+async function uploadFiles(id,fl){
+  if(!fl.length)return;
+  for(const f of fl){const safe=f.name.normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^\w.\-]+/g,'_');
+    const path=`despeses/${id}/${Date.now()}_${safe}`;
+    const {error}=await sb.storage.from('documents').upload(path,f,{contentType:f.type});if(error)return fail(error);
+    const r=await sb.from('despesa_fitxers').insert({despesa_id:id,path,nom:f.name,mime:f.type,mida:f.size});if(r.error)return fail(r.error);}
+  toast('Document pujat');await loadAll();despDlg({...S.desp.find(x=>x.id===id)});
+}
+
+/* ---------- BANC ---------- */
+const concOf=m=>S.conc.filter(c=>c.moviment_id===m.id);
+function candidates(m){
+  const usedF=new Set(S.conc.map(c=>c.factura_id).filter(Boolean)),usedD=new Set(S.conc.map(c=>c.despesa_id).filter(Boolean));
+  const days=d=>d?Math.abs((new Date(d)-new Date(m.data))/864e5):999;
+  const words=norm(m.concepte).split(/[^A-ZÀ-Ü0-9]+/).filter(w=>w.length>3&&!['TRANSFERENCIA','ABONO','ADEUDO','RECIBO','PAGO','COLLA','CASTELLERA','MARRECS','SALT'].includes(w));
+  const txt=s=>{const n=norm(s);return words.filter(w=>n.includes(w)).length};
+  let out=[];
+  if(m.import>0){S.fact.forEach(f=>{if(usedF.has(f.id)||f.estat==='Anul·lada')return;const eq=cents(f.import)===cents(m.import);const t=txt(f.client);if(!eq&&!t)return;
+      out.push({tipus:'factura',id:f.id,eq,score:(eq?100:0)+t*15-Math.min(days(f.data),400)/10,label:`Factura ${f.num} · ${f.client}`,sub:`${fd(f.data)} · ${f.concepte||''}`,imp:f.import})});}
+  else{S.desp.forEach(d=>{if(usedD.has(d.id))return;const eq=cents(d.total)===-cents(m.import);const t=txt(d.proveidor)+txt(d.persona);if(!eq&&!t)return;
+      out.push({tipus:'despesa',id:d.id,eq,score:(eq?100:0)+t*15-Math.min(days(d.data_pagament||d.data),400)/10,label:`${d.proveidor||'—'} · ${d.persona||''}`,sub:`${fd(d.data)} · ${d.concepte||''}`,imp:-d.total})});}
+  return out.sort((a,b)=>b.score-a.score);
+}
+function vBanc(){
+  const q=S.q.b||'',fe=S.q.be??'pendent';
+  const M=S.mov.filter(m=>inAny(m.data)&&(!fe||m.estat===fe)&&(!q||norm(m.concepte+' '+(m.anotacio||'')).includes(norm(q))));
+  const show=M.slice(0,400);
+  $('#m').innerHTML=`<div class="bar"><input id="qb" placeholder="Cerca concepte o anotació…" value="${esc(q)}" style="min-width:240px">
+  <select id="be">${[['pendent','Pendents'],['conciliat','Conciliats'],['ignorat','Ignorats'],['','Tots']].map(([v,l])=>`<option value="${v}" ${fe===v?'selected':''}>${l}</option>`).join('')}</select>
+  <span class="mut">${M.length} moviments${M.length>400?' (es mostren 400)':''}</span><span class="sp"></span>
+  ${pot()?`<label class="b" style="cursor:pointer">⬆ Importa extracte (.xlsx, .xls, .csv)<input type="file" id="ext" accept=".xlsx,.xls,.csv,.txt" hidden></label>
+  <button class="b" id="auto">Concilia automàticament</button>`:''}</div>
+  <div class="tw"><table><tr><th>Data</th><th>Concepte</th><th class="n">Import</th><th class="n">Saldo</th><th>Anotació / vinculat a</th><th>Suggeriment</th></tr>
+  ${show.map(m=>{const c=concOf(m);const link=c.map(x=>{if(x.factura_id){const f=S.fact.find(y=>y.id===x.factura_id);return `🧾 ${esc(f?.num)} ${esc(f?.client)}`}const d=S.desp.find(y=>y.id===x.despesa_id);return `📄 ${esc(d?.proveidor)} (${fd(d?.data)})`}).join('<br>');
+    const best=m.estat==='pendent'?candidates(m).find(x=>x.eq):null;
+    return `<tr class="cl" data-m="${m.id}"><td class="nw">${fd(m.data)}</td><td>${esc(m.concepte)}</td><td class="n ${m.import<0?'neg':'pos'}">${eur(m.import)}</td><td class="n mut">${eur(m.saldo)}</td>
+    <td style="font-size:12px">${m.estat==='ignorat'?'<span class="pill">Ignorat</span> ':''}${link}${m.anotacio?`<div class="mut">${esc(m.anotacio)}</div>`:''}${m.clt_codi?`<div class="mut">${esc(m.clt_codi)} · ${esc(catNom(m.categoria_id))}</div>`:''}</td>
+    <td>${best&&pot()?`<div class="sug"><span>${esc(best.label)}</span><button class="b sm p" data-ok="${m.id}">✓</button></div>`:''}</td></tr>`}).join('')}</table></div>`;
+  $('#qb').oninput=e=>{S.q.b=e.target.value;const p=e.target.selectionStart;vBanc();$('#qb').focus();$('#qb').setSelectionRange(p,p)};
+  $('#be').onchange=e=>{S.q.be=e.target.value;vBanc()};
+  if($('#ext'))$('#ext').onchange=e=>importExtracte(e.target.files[0]);
+  if($('#auto'))$('#auto').onclick=autoConc;
+  document.querySelectorAll('[data-ok]').forEach(b=>b.onclick=async e=>{e.stopPropagation();const m=S.mov.find(x=>x.id===b.dataset.ok);const c=candidates(m).find(x=>x.eq);
+    if(confirm(`Vincular el moviment de ${eur(m.import)} (${fd(m.data)}) amb:\n${c.label}?`)){await conciliar(m,c);await loadAll();render();toast('Conciliat');}});
+  document.querySelectorAll('tr[data-m]').forEach(t=>t.onclick=()=>movDlg(S.mov.find(x=>x.id===t.dataset.m)));
+}
+async function conciliar(m,c){
+  const ins={moviment_id:m.id,import:m.import,creat_per:S.user.email};ins[c.tipus+'_id']=c.id;
+  let r=await sb.from('conciliacions').insert(ins);if(r.error)throw r.error;
+  const upd={estat:'conciliat'};
+  if(c.tipus==='factura'){const f=S.fact.find(x=>x.id===c.id);upd.clt_codi=f.clt_codi;
+    if(f.estat!=='Cobrada'){r=await sb.from('factures_emeses').update({estat:'Cobrada',data_cobrament:m.data}).eq('id',f.id);if(r.error)throw r.error;}}
+  else{const d=S.desp.find(x=>x.id===c.id);upd.clt_codi=d.clt_codi;upd.categoria_id=d.categoria_id;
+    if(!d.pagada||!d.data_pagament){r=await sb.from('despeses').update({pagada:true,data_pagament:d.data_pagament||m.data,mitja_pagament:d.mitja_pagament||(/RECIBO|ADEUDO/.test(norm(m.concepte))?'Domiciliació':/TARJETA|COMPRA/.test(norm(m.concepte))?'Targeta':'Transferència')}).eq('id',d.id);if(r.error)throw r.error;}}
+  r=await sb.from('moviments').update(upd).eq('id',m.id);if(r.error)throw r.error;
+}
+async function autoConc(){
+  const P=S.mov.filter(m=>m.estat==='pendent');const plan=[];const used=new Set();
+  for(const m of P){const c=candidates(m).filter(x=>x.eq&&!used.has(x.id));
+    if(c.length&&(c.length===1||c[0].score-c[1].score>5)){plan.push([m,c[0]]);used.add(c[0].id);}}
+  if(!plan.length)return toast('Cap coincidència clara');
+  openDlg(`Conciliació automàtica (${plan.length})`,`<p class="mut">Coincidències per import exacte. Desmarca les que no siguin correctes.</p>${plan.map(([m,c],i)=>`<label class="cand"><span><b>${fd(m.data)} · ${eur(m.import)}</b> ${esc(m.concepte)}<br><span class="mut">→ ${esc(c.label)} · ${esc(c.sub)}</span></span><input type="checkbox" data-i="${i}" checked></label>`).join('')}`,
+    [{t:'Cancel·la',f:()=>dlg.close()},{t:'Concilia les marcades',p:1,f:async()=>{const sel=[...document.querySelectorAll('[data-i]:checked')].map(e=>plan[+e.dataset.i]);
+      try{for(const [m,c] of sel)await conciliar(m,c);}catch(e){fail(e)}dlg.close();toast(sel.length+' moviments conciliats');await loadAll();render();}}]);
+}
+function movDlg(m){
+  const c=concOf(m);const cand=candidates(m).slice(0,8);
+  const linked=c.map(x=>{const lab=x.factura_id?(()=>{const f=S.fact.find(y=>y.id===x.factura_id);return `Factura ${f?.num} · ${f?.client}`})():(()=>{const d=S.desp.find(y=>y.id===x.despesa_id);return `${d?.proveidor} · ${d?.concepte}`})();
+    return `<div class="cand"><span>${esc(lab)}</span>${pot()?`<button class="b sm" data-un="${x.id}">Desvincula</button>`:''}</div>`}).join('');
+  const body=`<p><b>${fd(m.data)}</b> · ${esc(m.concepte)} · <b class="${m.import<0?'neg':'pos'}">${eur(m.import)}</b></p>
+  ${linked?`<h3>Vinculat a</h3>${linked}`:''}
+  ${pot()?`<div class="fg"><label class="w">Anotació<textarea id="man">${esc(m.anotacio)}</textarea></label>
+  <label>Categoria<select id="mcat"><option value=""></option>${S.cats.map(x=>`<option value="${x.id}" ${x.id===m.categoria_id?'selected':''}>${esc(x.nom)} (${x.tipus})</option>`).join('')}</select></label>
+  <label>Partida CLT027<select id="mclt"><option value=""></option>${S.clt.map(x=>`<option value="${x.codi}" ${x.codi===m.clt_codi?'selected':''}>${x.codi} ${esc(x.nom)}</option>`).join('')}</select></label>
+  <label>Estat<select id="mest">${['pendent','conciliat','ignorat'].map(x=>`<option ${x===m.estat?'selected':''}>${x}</option>`).join('')}</select></label></div>
+  ${m.estat!=='conciliat'?`<h3>Possibles coincidències</h3>${cand.map((x,i)=>`<div class="cand"><span>${x.eq?'<span class="pill ok">import exacte</span> ':''}${esc(x.label)}<br><span class="mut" style="font-size:12px">${esc(x.sub)} · ${eur(x.imp)}</span></span><button class="b sm p" data-ci="${i}">Vincula</button></div>`).join('')||'<p class="mut">Cap factura o despesa amb el mateix import o nom.</p>'}`:''}`:''}`;
+  openDlg('Moviment bancari',body,pot()?[{t:'Tanca',f:()=>dlg.close()},{t:'Desa anotació',p:1,f:async()=>{
+    const upd={anotacio:$('#man').value||null,categoria_id:$('#mcat').value?+$('#mcat').value:null,clt_codi:$('#mclt').value||null,estat:$('#mest').value};
+    const {error}=await sb.from('moviments').update(upd).eq('id',m.id);if(error)return fail(error);dlg.close();toast('Desat');await loadAll();render();}}]:[{t:'Tanca',f:()=>dlg.close()}]);
+  document.querySelectorAll('[data-ci]').forEach(b=>b.onclick=async()=>{const x=cand[+b.dataset.ci];if(!confirm('Vincular amb '+x.label+'?'+(x.eq?'':'\n\nAtenció: l\'import no coincideix.')))return;
+    try{await conciliar(m,x);}catch(e){return fail(e)}dlg.close();toast('Conciliat');await loadAll();render();});
+  document.querySelectorAll('[data-un]').forEach(b=>b.onclick=async()=>{if(!confirm('Desvincular? (la factura/despesa no canvia d\'estat)'))return;
+    await sb.from('conciliacions').delete().eq('id',b.dataset.un);if(concOf(m).length<=1)await sb.from('moviments').update({estat:'pendent'}).eq('id',m.id);dlg.close();await loadAll();render();});
+}
+
+/* ---------- IMPORTACIÓ D'EXTRACTE ---------- */
+function pnum(v){if(v==null||v==='')return null;if(typeof v==='number')return v;let s=String(v).replace(/[€\s]/g,'');if(s.includes(','))s=s.replace(/\./g,'').replace(',','.');const n=parseFloat(s);return isNaN(n)?null:n;}
+function pdate(v){if(!v)return null;if(v instanceof Date)return new Date(v.getTime()-v.getTimezoneOffset()*6e4).toISOString().slice(0,10);
+  if(typeof v==='number'){const d=XLSX.SSF.parse_date_code(v);return `${d.y}-${String(d.m).padStart(2,'0')}-${String(d.d).padStart(2,'0')}`;}
+  const s=String(v).trim();let m=s.match(/^(\d{4})-(\d{2})-(\d{2})/);if(m)return m[0];m=s.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2,4})/);if(m){const y=m[3].length===2?'20'+m[3]:m[3];return `${y}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;}return null;}
+async function importExtracte(file){
+  if(!file)return;
+  try{
+    let rows;
+    if(/\.(csv|txt)$/i.test(file.name)){const t=await file.text();const sep=[';','|','\t',','].sort((a,b)=>t.split(b).length-t.split(a).length)[0];
+      rows=t.split(/\r?\n/).filter(l=>l.trim()).map(l=>{const out=[];let cur='',q=false;for(const ch of l){if(ch==='"'){q=!q;continue}if(ch===sep&&!q){out.push(cur);cur='';}else cur+=ch;}out.push(cur);return out.map(x=>x.trim());});}
+    else{const wb=XLSX.read(await file.arrayBuffer(),{cellDates:true});rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,raw:true,defval:''});}
+    const hi=rows.findIndex(r=>r.some(c=>/concept/i.test(c))&&r.some(c=>/^import/i.test(String(c).trim())));
+    if(hi<0)throw new Error('No trobo la capçalera (cal una columna "Concepto/Concepte" i una "Importe/Import").');
+    const H=rows[hi].map(c=>String(c).trim().toLowerCase());const col=re=>H.findIndex(h=>re.test(h));
+    const cD=col(/operativa|^fecha$|^data$|^f\. ?oper|^fecha oper/)>=0?col(/operativa|^fecha$|^data$|^f\. ?oper|^fecha oper/):col(/fecha|data/);
+    const cV=col(/valor/),cC=col(/concept/),cI=col(/^import/),cS=col(/saldo/),cA=col(/anotaci|^nota/);
+    const seen={};const out=[];
+    for(const r of rows.slice(hi+1)){const data=pdate(r[cD]),imp=pnum(r[cI]);if(!data||imp==null)continue;
+      const concepte=String(r[cC]||'').trim().replace(/\s+/g,' ');const saldo=cS>=0?pnum(r[cS]):null;
+      let h=`${data}|${imp.toFixed(2)}|${saldo==null?'':saldo.toFixed(2)}|${norm(concepte)}`;seen[h]=(seen[h]||0)+1;if(seen[h]>1)h+='#'+seen[h];
+      out.push({data,data_valor:cV>=0?pdate(r[cV]):null,concepte,import:imp,saldo,hash:h,anotacio:cA>=0&&r[cA]?String(r[cA]):null});}
+    if(!out.length)throw new Error('No s\'ha trobat cap moviment al fitxer.');
+    const existing=new Set(S.mov.map(m=>m.hash));const noves=out.filter(o=>!existing.has(o.hash));
+    const dates=out.map(o=>o.data).sort();
+    openDlg('Importa extracte',`<p><b>${esc(file.name)}</b>: ${out.length} moviments del ${fd(dates[0])} al ${fd(dates.at(-1))}.</p>
+      <p><b>${noves.length}</b> són nous; ${out.length-noves.length} ja hi eren i s'ignoraran.</p>
+      ${noves.slice(0,8).map(o=>`<div class="mut" style="font-size:12px">${fd(o.data)} · ${esc(o.concepte)} · ${eur(o.import)}</div>`).join('')}${noves.length>8?'<div class="mut">…</div>':''}`,
+      [{t:'Cancel·la',f:()=>dlg.close()},...(noves.length?[{t:`Importa ${noves.length} moviments`,p:1,f:async()=>{
+        const {data:imp,error}=await sb.from('importacions').insert({fitxer:file.name,files:out.length,noves:noves.length,creat_per:S.user.email}).select().single();if(error)return fail(error);
+        for(let i=0;i<noves.length;i+=500){const r=await sb.from('moviments').upsert(noves.slice(i,i+500).map(o=>({...o,importacio_id:imp.id})),{onConflict:'hash',ignoreDuplicates:true});if(r.error)return fail(r.error);}
+        dlg.close();toast(noves.length+' moviments importats');await loadAll();S.q.be='pendent';render();}}]:[])]);
+  }catch(e){fail(e)}
+}
+boot();
+</script>
+</body>
+</html>
