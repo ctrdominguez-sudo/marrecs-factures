@@ -357,10 +357,10 @@ function vBanc(){
   const q=S.q.b||'',fe=S.q.be??'pendent';
   const qn=/^[-+]?[\d.,\s€]+$/.test(q.trim())?pnum(q.replace(/\s|€/g,'')):null;
   const M=S.mov.filter(m=>inAny(m.data)&&(!fe||m.estat===fe)&&(!q||(qn!=null?(cents(Math.abs(m.import))===cents(Math.abs(qn))||String(Math.abs(m.import).toFixed(2)).replace('.',',').startsWith(q.trim().replace(/^[-+]/,'').replace(/\./g,''))):norm(m.concepte+' '+(m.anotacio||'')).includes(norm(q)))));
-  const show=M.slice(0,400);
+  const show=M;
   $('#m').innerHTML=`<div class="bar"><input id="qb" placeholder="Cerca concepte, anotació o import…" value="${esc(q)}" style="min-width:240px">
   <select id="be">${[['pendent','Pendents'],['conciliat','Conciliats'],['ignorat','Ignorats'],['','Tots']].map(([v,l])=>`<option value="${v}" ${fe===v?'selected':''}>${l}</option>`).join('')}</select>
-  <span class="mut">${M.length} moviments${M.length>400?' (es mostren 400)':''}</span><span class="sp"></span>
+  <span class="mut">${M.length} moviments · ${eur(M.reduce((a,m)=>a+Number(m.import),0))}</span><span class="sp"></span>
   ${pot()?`<label class="b" style="cursor:pointer">⬆ Importa extracte (.xlsx, .xls, .csv)<input type="file" id="ext" accept=".xlsx,.xls,.csv,.txt" hidden></label>
   <button class="b" id="auto">Concilia automàticament</button>`:''}</div>
   <div class="tw"><table><tr><th>Data</th><th>Concepte</th><th class="n">Import</th><th class="n">Saldo</th><th>Anotació / vinculat a</th><th>Suggeriment</th></tr>
