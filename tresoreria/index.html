@@ -340,17 +340,20 @@ const concOf=m=>S.conc.filter(c=>c.moviment_id===m.id);
 function candidates(m){
   const usedF=new Set(S.conc.map(c=>c.factura_id).filter(Boolean)),usedD=new Set(S.conc.map(c=>c.despesa_id).filter(Boolean));
   const days=d=>d?Math.abs((new Date(d)-new Date(m.data))/864e5):999;
+  const after=d=>d?(new Date(m.data)-new Date(d))/864e5:-999; // dies del document al moviment
   const words=norm(m.concepte).split(/[^A-ZÀ-Ü0-9]+/).filter(w=>w.length>3&&!['TRANSFERENCIA','ABONO','ADEUDO','RECIBO','PAGO','COLLA','CASTELLERA','MARRECS','SALT'].includes(w));
   const txt=s=>{const n=norm(s);return words.filter(w=>n.includes(w)).length};
   let out=[];
   if(m.import>0){S.fact.forEach(f=>{if(usedF.has(f.id)||f.estat==='Anul·lada')return;const eq=cents(f.import)===cents(m.import);const t=txt(f.client);if(!eq&&!t)return;
-      out.push({tipus:'factura',id:f.id,eq,score:(eq?100:0)+t*15-Math.min(days(f.data),400)/10,label:`Factura ${f.num} · ${f.client}`,sub:`${fd(f.data)} · ${f.concepte||''}`,imp:f.import})});
+      const a=after(f.data),ok=eq&&(t>0||(f.estat!=='Cobrada'&&a>=-30&&a<=180));
+      out.push({tipus:'factura',id:f.id,eq,ok,score:(eq?100:0)+(ok?50:0)+t*15-Math.min(days(f.data),400)/10,label:`Factura ${f.num} · ${f.client}`,sub:`${fd(f.data)} · ${f.concepte||''}`,imp:f.import})});
     const C=norm(m.concepte);
     S.sub.forEach(x=>{if(x.estat==='Denegada')return;const pend=subPend(x);if(pend<=0)return;const eq=cents(pend)===cents(m.import)||cents(subEsperat(x))===cents(m.import);
       const ens=norm(x.ens);const t=(/GENERALITAT|CULTURA/.test(C)&&/GENERALITAT/.test(ens))||(/GIRONA/.test(C)&&/GIRONA/.test(ens)&&(/DIPUT/.test(C)===/DIPUT/.test(ens)))||(/SALT/.test(C.replace(/MARRECS DE SALT/g,''))&&/SALT/.test(ens))?1:0;
-      if(!eq&&!t)return;out.push({tipus:'subvencio',id:x.id,eq,parcial:!eq,score:(eq?100:0)+t*30,label:`Subvenció ${x.ens} ${x.any_sub}`,sub:`${x.codi||x.convocatoria||''} · pendent ${eur(pend)}`,imp:pend})});}
+      if(!eq&&!t)return;out.push({tipus:'subvencio',id:x.id,eq,ok:eq,parcial:!eq,score:(eq?100:0)+t*30,label:`Subvenció ${x.ens} ${x.any_sub}`,sub:`${x.codi||x.convocatoria||''} · pendent ${eur(pend)}`,imp:pend})});}
   else{S.desp.forEach(d=>{if(usedD.has(d.id))return;const eq=cents(d.total)===-cents(m.import);const t=txt(d.proveidor)+txt(d.persona);if(!eq&&!t)return;
-      out.push({tipus:'despesa',id:d.id,eq,score:(eq?100:0)+t*15-Math.min(days(d.data_pagament||d.data),400)/10,label:`${d.proveidor||'—'} · ${d.persona||''}`,sub:`${fd(d.data)} · ${d.concepte||''}`,imp:-d.total})});}
+      const a=after(d.data),ok=eq&&!/^COMISION/.test(norm(m.concepte))&&(t>0||(a>=-30&&a<=180)||(d.data_pagament&&days(d.data_pagament)<=10));
+      out.push({tipus:'despesa',id:d.id,eq,ok,score:(eq?100:0)+(ok?50:0)+t*15-Math.min(days(d.data_pagament||d.data),400)/10,label:`${d.proveidor||'—'} · ${d.persona||''}`,sub:`${fd(d.data)} · ${d.concepte||''}`,imp:-d.total})});}
   return out.sort((a,b)=>b.score-a.score);
 }
 function vBanc(){
@@ -365,7 +368,7 @@ function vBanc(){
   <button class="b" id="auto">Concilia automàticament</button>`:''}</div>
   <div class="tw"><table><tr><th>Data</th><th>Concepte</th><th class="n">Import</th><th class="n">Saldo</th><th>Anotació / vinculat a</th><th>Suggeriment</th></tr>
   ${show.map(m=>{const c=concOf(m);const link=c.map(x=>{if(x.subvencio_id){const v=S.sub.find(y=>y.id===x.subvencio_id);return `🏛 ${esc(v?.ens)} ${v?.any_sub||''}`}if(x.factura_id){const f=S.fact.find(y=>y.id===x.factura_id);return `🧾 ${esc(f?.num)} ${esc(f?.client)}`}const d=S.desp.find(y=>y.id===x.despesa_id);return `📄 ${esc(d?.proveidor)} (${fd(d?.data)})`}).join('<br>');
-    const best=m.estat==='pendent'?candidates(m).find(x=>x.eq):null;
+    const best=m.estat==='pendent'?candidates(m).find(x=>x.ok):null;
     return `<tr class="cl" data-m="${m.id}"><td class="nw">${fd(m.data)}</td><td>${esc(m.concepte)}</td><td class="n ${m.import<0?'neg':'pos'}">${eur(m.import)}</td><td class="n mut">${eur(m.saldo)}</td>
     <td style="font-size:12px">${m.estat==='ignorat'?'<span class="pill">Ignorat</span> ':''}${link}${m.anotacio?`<div class="mut">${esc(m.anotacio)}</div>`:''}${m.clt_codi?`<div class="mut">${esc(m.clt_codi)} · ${esc(catNom(m.categoria_id))}</div>`:''}</td>
     <td>${best&&pot()?`<div class="sug"><span>${esc(best.label)} · <b>${eur(best.imp)}</b> ${cents(Math.abs(best.imp))===cents(Math.abs(m.import))?'<span class="pos" title="Import idèntic">✓</span>':''}</span><button class="b sm p" data-ok="${m.id}">✓</button></div>`:''}</td></tr>`}).join('')}</table></div>`;
@@ -373,7 +376,7 @@ function vBanc(){
   $('#be').onchange=e=>{S.q.be=e.target.value;vBanc()};
   if($('#ext'))$('#ext').onchange=e=>importExtracte(e.target.files[0]);
   if($('#auto'))$('#auto').onclick=autoConc;
-  document.querySelectorAll('[data-ok]').forEach(b=>b.onclick=async e=>{e.stopPropagation();const m=S.mov.find(x=>x.id===b.dataset.ok);const c=candidates(m).find(x=>x.eq);
+  document.querySelectorAll('[data-ok]').forEach(b=>b.onclick=async e=>{e.stopPropagation();const m=S.mov.find(x=>x.id===b.dataset.ok);const c=candidates(m).find(x=>x.ok);
     if(confirm(`Vincular el moviment de ${eur(m.import)} (${fd(m.data)}) amb:\n${c.label}?`)){await conciliar(m,c);await loadAll();render();toast('Conciliat');}});
   document.querySelectorAll('tr[data-m]').forEach(t=>t.onclick=()=>movDlg(S.mov.find(x=>x.id===t.dataset.m)));
 }
@@ -391,7 +394,7 @@ async function conciliar(m,c){
 }
 async function autoConc(){
   const P=S.mov.filter(m=>m.estat==='pendent');const plan=[];const used=new Set();
-  for(const m of P){const c=candidates(m).filter(x=>x.eq&&!used.has(x.id));
+  for(const m of P){const c=candidates(m).filter(x=>x.ok&&!used.has(x.id));
     if(c.length&&(c.length===1||c[0].score-c[1].score>5)){plan.push([m,c[0]]);used.add(c[0].id);}}
   if(!plan.length)return toast('Cap coincidència clara');
   openDlg(`Conciliació automàtica (${plan.length})`,`<p class="mut">Coincidències per import exacte. Desmarca les que no siguin correctes.</p>${plan.map(([m,c],i)=>`<label class="cand"><span><b>${fd(m.data)} · ${eur(m.import)}</b> ${esc(m.concepte)}<br><span class="mut">→ ${esc(c.label)} · ${esc(c.sub)}</span></span><input type="checkbox" data-i="${i}" checked></label>`).join('')}`,
@@ -408,14 +411,18 @@ function movDlg(m){
   <label>Categoria<select id="mcat"><option value=""></option>${S.cats.map(x=>`<option value="${x.id}" ${x.id===m.categoria_id?'selected':''}>${esc(x.nom)} (${x.tipus})</option>`).join('')}</select></label>
   <label>Partida CLT027<select id="mclt"><option value=""></option>${S.clt.map(x=>`<option value="${x.codi}" ${x.codi===m.clt_codi?'selected':''}>${x.codi} ${esc(x.nom)}</option>`).join('')}</select></label>
   <label>Estat<select id="mest">${['pendent','conciliat','ignorat'].map(x=>`<option ${x===m.estat?'selected':''}>${x}</option>`).join('')}</select></label></div>
-  ${m.estat!=='conciliat'?`<h3>Possibles coincidències</h3>${cand.map((x,i)=>`<div class="cand"><span>${x.eq?'<span class="pill ok">import exacte</span> ':''}${esc(x.label)}<br><span class="mut" style="font-size:12px">${esc(x.sub)} · ${eur(x.imp)}</span></span><button class="b sm p" data-ci="${i}">Vincula</button></div>`).join('')||'<p class="mut">Cap factura o despesa amb el mateix import o nom.</p>'}`:''}`:''}`;
+  ${m.estat!=='conciliat'?`<h3>Possibles coincidències</h3>${cand.map((x,i)=>`<div class="cand"><span>${x.eq?'<span class="pill ok">import exacte</span> ':''}${x.eq&&!x.ok?'<span class="pill wa">data o estat poc probable</span> ':''}${esc(x.label)}<br><span class="mut" style="font-size:12px">${esc(x.sub)} · ${eur(x.imp)}</span></span><button class="b sm p" data-ci="${i}">Vincula</button></div>`).join('')||'<p class="mut">Cap factura o despesa amb el mateix import o nom.</p>'}`:''}`:''}`;
   openDlg('Moviment bancari',body,pot()?[{t:'Tanca',f:()=>dlg.close()},{t:'Desa anotació',p:1,f:async()=>{
     const upd={anotacio:$('#man').value||null,categoria_id:$('#mcat').value?+$('#mcat').value:null,clt_codi:$('#mclt').value||null,estat:$('#mest').value};
     const {error}=await sb.from('moviments').update(upd).eq('id',m.id);if(error)return fail(error);dlg.close();toast('Desat');await loadAll();render();}}]:[{t:'Tanca',f:()=>dlg.close()}]);
   document.querySelectorAll('[data-ci]').forEach(b=>b.onclick=async()=>{const x=cand[+b.dataset.ci];if(!confirm('Vincular amb '+x.label+'?'+(x.eq?'':'\n\nAtenció: l\'import no coincideix.')))return;
     try{await conciliar(m,x);}catch(e){return fail(e)}dlg.close();toast('Conciliat');await loadAll();render();});
-  document.querySelectorAll('[data-un]').forEach(b=>b.onclick=async()=>{if(!confirm('Desvincular? (la factura/despesa no canvia d\'estat)'))return;
-    await sb.from('conciliacions').delete().eq('id',b.dataset.un);if(concOf(m).length<=1)await sb.from('moviments').update({estat:'pendent'}).eq('id',m.id);dlg.close();await loadAll();render();});
+  document.querySelectorAll('[data-un]').forEach(b=>b.onclick=async()=>{const cc=S.conc.find(x=>x.id===b.dataset.un);
+    if(!confirm('Desvincular aquest moviment?'+(cc.factura_id?'\nLa factura tornarà a l\'estat "Enviada".':cc.subvencio_id?'\nSi la subvenció constava com a cobrada, tornarà a "Concedida".':'')))return;
+    await sb.from('conciliacions').delete().eq('id',b.dataset.un);
+    if(cc.factura_id){const f=S.fact.find(x=>x.id===cc.factura_id);if(f&&f.estat==='Cobrada'&&f.data_cobrament===m.data)await sb.from('factures_emeses').update({estat:'Enviada',data_cobrament:null}).eq('id',f.id);}
+    if(cc.despesa_id){const d=S.desp.find(x=>x.id===cc.despesa_id);if(d&&d.data_pagament===m.data)await sb.from('despeses').update({data_pagament:null}).eq('id',d.id);}
+    if(cc.subvencio_id){const v=S.sub.find(x=>x.id===cc.subvencio_id);if(v&&v.estat==='Cobrada')await sb.from('subvencions').update({estat:'Concedida'}).eq('id',v.id);}if(concOf(m).length<=1)await sb.from('moviments').update({estat:'pendent',clt_codi:null,categoria_id:null}).eq('id',m.id);dlg.close();await loadAll();render();});
 }
 
 /* ---------- IMPORTACIÓ D'EXTRACTE ---------- */
