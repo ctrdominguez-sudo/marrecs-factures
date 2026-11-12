@@ -1183,6 +1183,9 @@
   // =====================================================
   const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbw9ZIPh2kEW_m0kIBXBi5yubPYBb-84zdHVCSpNm2gsqp_gfE1Mwx5W8BUpJyHdtKpH_A/exec';
   // =====================================================
+  // Tresoreria (Supabase): on es desen les despeses i els documents
+  const TRESORERIA_URL  = 'https://wnnenblbouzlcpsiaxxc.supabase.co/functions/v1/nova-despesa';
+  const TRESORERIA_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndubmVuYmxib3V6bGNwc2lheHhjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTMzNTcwOTIsImV4cCI6MjEwODkzMzA5Mn0.vcwSmwMBf3edaVH2SqHH_xMHucWRTjcL7IQDbohHjD0'; // clau pública
 
 
   // ---- Tipus de document ----
@@ -2130,13 +2133,25 @@
     };
 
     try {
-      const resp   = await fetch(APPS_SCRIPT_URL, { method:'POST', body:JSON.stringify(payload) });
-      const result = await resp.json();
-      setProgress(100, 'Enviat!');
+      // 1) Tresoreria (obligatori): dades + documents a l'app de tresoreria
+      const resp   = await fetch(TRESORERIA_URL, {
+        method:'POST',
+        headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer '+TRESORERIA_ANON, 'apikey':TRESORERIA_ANON },
+        body:JSON.stringify(payload)
+      });
+      let result;
+      try { result = await resp.json(); } catch(e) { result = { success:false, error:'Error del servidor ('+resp.status+')' }; }
       if (result.success) {
-        showToast(cuaFactures.length
+        // 2) Còpia dels documents a Google Drive (Apps Script). Si falla, la factura ja és a tresoreria.
+        setProgress(85, 'Desant còpia a Google Drive...');
+        try { await fetch(APPS_SCRIPT_URL, { method:'POST', body:JSON.stringify(payload) }); }
+        catch(e) { console.warn('Còpia a Drive no feta:', e); }
+        setProgress(100, 'Enviat!');
+        if (result.errorsFitxers && result.errorsFitxers.length) console.warn('Fitxers no desats:', result.errorsFitxers);
+        showToast((cuaFactures.length
           ? '✅ Factura ' + textCua() + ' enviada correctament!'
-          : '✅ Factura enviada correctament! Els arxius són a Google Drive.');
+          : '✅ Factura enviada correctament a tresoreria!')
+          + (result.errorsFitxers && result.errorsFitxers.length ? ' (algun fitxer no s\'ha pogut desar)' : ''));
         // Si hi ha una cua de factures, mantenim les dades del soci i passem a la següent
         const hiHaCua = cuaFactures.length > 0;
         reiniciarFormulari(hiHaCua);
