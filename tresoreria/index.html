@@ -117,7 +117,7 @@ async function loadAll(){
     const [f,d,m,c,cats,clt,sv,pr]=await Promise.all([
       all(()=>sb.from('factures_emeses').select('*').order('num')),
       all(()=>sb.from('despeses').select('*,despesa_fitxers(count)').order('data',{ascending:false})),
-      all(()=>sb.from('moviments').select('*').order('data',{ascending:false}).order('saldo',{ascending:true})),
+      all(()=>sb.from('moviments').select('*').order('ordre',{ascending:false,nullsFirst:true}).order('data',{ascending:false})),
       all(()=>sb.from('conciliacions').select('*')),
       all(()=>sb.from('categories').select('*').order('nom')),
       all(()=>sb.from('categories_clt').select('*').order('ordre')),
@@ -356,20 +356,22 @@ function candidates(m){
       out.push({tipus:'despesa',id:d.id,eq,ok,score:(eq?100:0)+(ok?50:0)+t*15-Math.min(days(d.data_pagament||d.data),400)/10,label:`${d.proveidor||'—'} · ${d.persona||''}`,sub:`${fd(d.data)} · ${d.concepte||''}`,imp:-d.total})});}
   return out.sort((a,b)=>b.score-a.score);
 }
+function saltsSaldo(){const j={};for(let i=0;i<S.mov.length-1;i++){const a=S.mov[i],b=S.mov[i+1];if(a.saldo!=null&&b.saldo!=null&&cents(a.saldo-a.import)!==cents(b.saldo))j[a.id]=a.saldo-a.import-b.saldo;}return j;}
 function vBanc(){
+  const J=saltsSaldo(),nJ=Object.keys(J).length;
   const q=S.q.b||'',fe=S.q.be??'pendent';
   const qn=/^[-+]?[\d.,\s€]+$/.test(q.trim())?pnum(q.replace(/\s|€/g,'')):null;
   const M=S.mov.filter(m=>inAny(m.data)&&(!fe||m.estat===fe)&&(!q||(qn!=null?(cents(Math.abs(m.import))===cents(Math.abs(qn))||String(Math.abs(m.import).toFixed(2)).replace('.',',').startsWith(q.trim().replace(/^[-+]/,'').replace(/\./g,''))):norm(m.concepte+' '+(m.anotacio||'')).includes(norm(q)))));
   const show=M;
   $('#m').innerHTML=`<div class="bar"><input id="qb" placeholder="Cerca concepte, anotació o import…" value="${esc(q)}" style="min-width:240px">
   <select id="be">${[['pendent','Pendents'],['conciliat','Conciliats'],['ignorat','Ignorats'],['','Tots']].map(([v,l])=>`<option value="${v}" ${fe===v?'selected':''}>${l}</option>`).join('')}</select>
-  <span class="mut">${M.length} moviments · ${eur(M.reduce((a,m)=>a+Number(m.import),0))}</span><span class="sp"></span>
+  <span class="mut">${M.length} moviments · ${eur(M.reduce((a,m)=>a+Number(m.import),0))}</span>${nJ?`<span class="pill no">⚠ ${nJ} salts de saldo</span>`:'<span class="pill ok" title="Cada saldo = saldo anterior ± import">Saldo quadrat</span>'}${fe?'<span class="mut" style="font-size:12px">(filtre actiu: el saldo salta perquè s\'amaguen moviments; tria «Tots» per veure\'n l\'evolució)</span>':''}<span class="sp"></span>
   ${pot()?`<label class="b" style="cursor:pointer">⬆ Importa extracte (.xlsx, .xls, .csv)<input type="file" id="ext" accept=".xlsx,.xls,.csv,.txt" hidden></label>
   <button class="b" id="auto">Concilia automàticament</button>`:''}</div>
   <div class="tw"><table><tr><th>Data</th><th>Concepte</th><th class="n">Import</th><th class="n">Saldo</th><th>Anotació / vinculat a</th><th>Suggeriment</th></tr>
   ${show.map(m=>{const c=concOf(m);const link=c.map(x=>{if(x.subvencio_id){const v=S.sub.find(y=>y.id===x.subvencio_id);return `🏛 ${esc(v?.ens)} ${v?.any_sub||''}`}if(x.factura_id){const f=S.fact.find(y=>y.id===x.factura_id);return `🧾 ${esc(f?.num)} ${esc(f?.client)}`}const d=S.desp.find(y=>y.id===x.despesa_id);return `📄 ${esc(d?.proveidor)} (${fd(d?.data)})`}).join('<br>');
     const best=m.estat==='pendent'?candidates(m).find(x=>x.ok):null;
-    return `<tr class="cl" data-m="${m.id}"><td class="nw">${fd(m.data)}</td><td>${esc(m.concepte)}</td><td class="n ${m.import<0?'neg':'pos'}">${eur(m.import)}</td><td class="n mut">${eur(m.saldo)}</td>
+    return `<tr class="cl" data-m="${m.id}"><td class="nw">${fd(m.data)}</td><td>${esc(m.concepte)}</td><td class="n ${m.import<0?'neg':'pos'}">${eur(m.import)}</td><td class="n mut">${eur(m.saldo)}${J[m.id]!=null?` <span class="pill no" title="El saldo no quadra amb el moviment anterior (diferència ${eur(J[m.id])}). Pot faltar algun moviment.">⚠</span>`:''}</td>
     <td style="font-size:12px">${m.estat==='ignorat'?'<span class="pill">Ignorat</span> ':''}${link}${m.anotacio?`<div class="mut">${esc(m.anotacio)}</div>`:''}${m.clt_codi?`<div class="mut">${esc(m.clt_codi)} · ${esc(catNom(m.categoria_id))}</div>`:''}</td>
     <td>${best&&pot()?`<div class="sug"><span>${esc(best.label)} · <b>${eur(best.imp)}</b> ${cents(Math.abs(best.imp))===cents(Math.abs(m.import))?'<span class="pos" title="Import idèntic">✓</span>':''}</span><button class="b sm p" data-ok="${m.id}">✓</button></div>`:''}</td></tr>`}).join('')}</table></div>`;
   $('#qb').oninput=e=>{S.q.b=e.target.value;const p=e.target.selectionStart;vBanc();$('#qb').focus();$('#qb').setSelectionRange(p,p)};
@@ -447,6 +449,8 @@ async function importExtracte(file){
       const concepte=String(r[cC]||'').trim().replace(/\s+/g,' ');const saldo=cS>=0?pnum(r[cS]):null;
       let h=`${data}|${imp.toFixed(2)}|${saldo==null?'':saldo.toFixed(2)}|${norm(concepte)}`;seen[h]=(seen[h]||0)+1;if(seen[h]>1)h+='#'+seen[h];
       out.push({data,data_valor:cV>=0?pdate(r[cV]):null,concepte,import:imp,saldo,hash:h,anotacio:cA>=0&&r[cA]?String(r[cA]):null});}
+    {let asc=0,desc=0;for(let i=1;i<out.length;i++){const a=out[i-1],b=out[i];if(a.saldo==null||b.saldo==null)continue;if(cents(b.saldo-b.import)===cents(a.saldo))asc++;if(cents(a.saldo-a.import)===cents(b.saldo))desc++;}
+     const N=out.length;out.forEach((o,i)=>o.pos=desc>asc?N-1-i:i);}
     if(!out.length)throw new Error('No s\'ha trobat cap moviment al fitxer.');
     const existing=new Set(S.mov.map(m=>m.hash));const noves=out.filter(o=>!existing.has(o.hash));
     const dates=out.map(o=>o.data).sort();
@@ -456,7 +460,8 @@ async function importExtracte(file){
       [{t:'Cancel·la',f:()=>dlg.close()},...(noves.length?[{t:`Importa ${noves.length} moviments`,p:1,f:async()=>{
         const {data:imp,error}=await sb.from('importacions').insert({fitxer:file.name,files:out.length,noves:noves.length,creat_per:S.user.email}).select().single();if(error)return fail(error);
         for(let i=0;i<noves.length;i+=500){const r=await sb.from('moviments').upsert(noves.slice(i,i+500).map(o=>({...o,importacio_id:imp.id})),{onConflict:'hash',ignoreDuplicates:true});if(r.error)return fail(r.error);}
-        dlg.close();toast(noves.length+' moviments importats');await loadAll();S.q.be='pendent';render();}}]:[])]);
+        const ro=await sb.rpc('reordenar_moviments');if(ro.error)return fail(ro.error);
+        dlg.close();toast(noves.length+' moviments importats'+(ro.data?` · ⚠ ${ro.data} salts de saldo`:' · saldo quadrat'));await loadAll();S.q.be='pendent';render();}}]:[])]);
   }catch(e){fail(e)}
 }
 boot();
